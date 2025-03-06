@@ -37,19 +37,72 @@ class Background:
         surface.blit(self.image, (0, self.y1))
         surface.blit(self.image, (0, self.y2))
 
+class Enemy:
+    def __init__(self, x, y, speed=3):
+        self.image = pygame.Surface((40, 40))
+        self.image.fill(RED)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = speed
+
+    def update(self):
+        self.rect.y += self.speed
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
+
+class Boss(Enemy):
+    def __init__(self, x, y, speed=1):
+        super().__init__(x, y, speed)
+        self.image = pygame.Surface((100, 100))
+        self.image.fill((255, 100, 0))
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        self.rect.y += self.speed
+
 
 class Level:
     def __init__(self):
         self.background = Background(speed=2)
         self.timer = 0
         self.enemies = []
+        self.spawn_events = [
+            (180, lambda: self.spawn_enemies(3)),   # À 3 secondes, spawn 3
+            (600, lambda: self.spawn_enemies(5)),
+            (1200, lambda: self.spawn_boss())
+        ]
+        self.spawn_events.sort(key=lambda event: event[0])
+
+    def spawn_enemies(self, count):
+        for _ in range(count):
+            x = random.randint(20, SCREEN_WIDTH - 20)
+            enemy = Enemy(x, -20)
+            self.enemies.append(enemy)
+        print(f'Spawned {count} enemies at timer {self.timer}')
+
+    def spawn_boss(self):
+        boss = Boss(SCREEN_WIDTH // 2, -50)
+        self.enemies.append(boss)
+        print(f'Spawned boss at timer {self.timer}')
 
     def update(self):
         self.background.update()
         self.timer += 1
+        events_to_remove = []
+        for event in self.spawn_events:
+            if self.timer >= event[0]:
+                event[1]()
+                events_to_remove.append(event)
+        for event in events_to_remove:
+            self.spawn_events.remove(event)
+        for enemy in self.enemies:
+            enemy.update()
+        self.enemies = [e for e in self.enemies if e.rect.top < SCREEN_HEIGHT]
 
     def draw(self, surface):
         self.background.draw(surface)
+        for enemy in self.enemies:
+            enemy.draw(surface)
 
 class Projectile:
     def __init__(self, x, y, speed=10):
