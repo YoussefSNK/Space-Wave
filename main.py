@@ -4,10 +4,10 @@ import random
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 1000
 FPS = 60
 
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-YELLOW = (255, 255, 0)
+BLACK   = (0, 0, 0)
+RED     = (255, 0, 0)
+GREEN   = (0, 255, 0)
+YELLOW  = (255, 255, 0)
 
 class Background:
     def __init__(self, image_path=None, speed=2):
@@ -64,6 +64,54 @@ class Boss(Enemy):
         self.rect.y += self.speed
 
 
+class ShootingEnemy(Enemy):
+    def __init__(self, x, y, speed=3, shoot_delay_frames=60):
+        super().__init__(x, y, speed)
+        self.image = pygame.Surface((40, 40))
+        self.image.fill((200, 0, 200))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.timer = 0
+        self.shoot_delay_frames = shoot_delay_frames
+        self.last_shot_frame = 0
+
+    def update(self, player_position, enemy_projectiles):
+        self.timer += 1
+        if self.timer < 120:
+            self.rect.y += self.speed
+        else:
+            if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
+                self.last_shot_frame = self.timer
+                proj = self.shoot(player_position)
+                enemy_projectiles.append(proj)
+
+    def shoot(self, player_position):
+        ex, ey = self.rect.center
+        px, py = player_position
+        dx = px - ex
+        dy = py - ey
+        dist = (dx**2 + dy**2) ** 0.5
+        if dist == 0:
+            dist = 1
+        dx /= dist
+        dy /= dist
+        return EnemyProjectile(ex, ey, dx, dy, speed=7)
+
+class EnemyProjectile:
+    def __init__(self, x, y, dx, dy, speed=7):
+        self.image = pygame.Surface((5, 10))
+        self.image.fill(RED)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+
+    def update(self):
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
+
 class Level:
     def __init__(self):
         self.background = Background(speed=2)
@@ -72,6 +120,7 @@ class Level:
         self.spawn_events = [
             (180, lambda: self.spawn_enemies(3)),   # À 3 secondes, spawn 3
             (600, lambda: self.spawn_enemies(5)),
+            (900, lambda: self.spawn_shooting_enemy(1)),
             (1200, lambda: self.spawn_boss())
         ]
         self.spawn_events.sort(key=lambda event: event[0])
@@ -82,6 +131,13 @@ class Level:
             enemy = Enemy(x, -20)
             self.enemies.append(enemy)
         print(f'Spawned {count} enemies at timer {self.timer}')
+
+    def spawn_shooting_enemy(self, count):
+        for _ in range(count):
+            x = random.randint(20, SCREEN_WIDTH - 20)
+            enemy = ShootingEnemy(x, -20)
+            self.enemies.append(enemy)
+        print(f'Spawned {count} shooting enemy at timer {self.timer}')
 
     def spawn_boss(self):
         boss = Boss(SCREEN_WIDTH // 2, -50)
@@ -99,7 +155,8 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            enemy.update()
+            if not isinstance(enemy, ShootingEnemy):
+                enemy.update()
         self.enemies = [e for e in self.enemies if e.rect.top < SCREEN_HEIGHT]
 
         if any(isinstance(enemy, Boss) for enemy in self.enemies):
@@ -134,6 +191,7 @@ class Player:
         self.rect = self.image.get_rect(center=(x, y))
         self.shoot_delay = 250
         self.last_shot = pygame.time.get_ticks()
+        self.hp = 100
 
     def update(self):
         pos = pygame.mouse.get_pos()
@@ -159,6 +217,7 @@ def main():
     level = Level()
     player = Player(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100)
     projectiles = []
+    enemy_projectiles = []
 
     while running:
         for event in pygame.event.get():
@@ -172,6 +231,16 @@ def main():
         for projectile in projectiles:
             projectile.update()
         projectiles = [p for p in projectiles if p.rect.bottom > 0]
+
+        for enemy in level.enemies:
+            if isinstance(enemy, ShootingEnemy):
+                enemy.update(player.rect.center, enemy_projectiles)
+
+        for e_proj in enemy_projectiles:
+            e_proj.update()
+        enemy_projectiles = [p for p in enemy_projectiles if (p.rect.top < SCREEN_HEIGHT and 
+                                                              p.rect.left < SCREEN_WIDTH and 
+                                                              p.rect.right > 0)]
 
         for projectile in projectiles[:]:
             for enemy in level.enemies[:]:
@@ -189,15 +258,40 @@ def main():
                         level.enemies.remove(enemy)
                     break
 
+        for e_proj in enemy_projectiles[:]:
+            if e_proj.rect.colliderect(player.rect):
+                try:
+                    enemy_projectiles.remove(e_proj)
+                except ValueError:
+                    pass
+                player.hp -= 1
+                print(f'Player touché par projectile ! HP restant : {player.hp}')
+                if player.hp <= 0:
+                    print("Player éliminé ! Game Over.")
+                    running = False
+
+        for enemy in level.enemies[:]:
+            if enemy.rect.colliderect(player.rect):
+                level.enemies.remove(enemy)
+                player.hp -= 1
+                print(f'Player touché par ennemi ! HP restant : {player.hp}')
+                if player.hp <= 0:
+                    print("Player éliminé ! Game Over.")
+                    running = False
+
         screen.fill(BLACK)
         level.draw(screen)
         for projectile in projectiles:
             projectile.draw(screen)
+        for e_proj in enemy_projectiles:
+            e_proj.draw(screen)
         player.draw(screen)
 
         font = pygame.font.SysFont(None, 36)
         timer_text = font.render(f"Timer: {level.timer}", True, (255, 255, 255))
         screen.blit(timer_text, (10, 10))
+        hp_text = font.render(f"HP: {player.hp}", True, (255, 255, 255))
+        screen.blit(hp_text, (10, 50))
 
         pygame.display.flip()
         clock.tick(FPS)
