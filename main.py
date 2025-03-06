@@ -43,6 +43,7 @@ class Enemy:
         self.image.fill(RED)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
+        self.hp = 1
 
     def update(self):
         self.rect.y += self.speed
@@ -56,6 +57,7 @@ class Boss(Enemy):
         self.image = pygame.Surface((100, 100))
         self.image.fill((255, 100, 0))
         self.rect = self.image.get_rect(center=(x, y))
+        self.hp = 5
 
     def update(self):
         self.rect.y += self.speed
@@ -162,6 +164,22 @@ def main():
         for projectile in projectiles:
             projectile.update()
         projectiles = [p for p in projectiles if p.rect.bottom > 0]
+
+        for projectile in projectiles[:]:
+            for enemy in level.enemies[:]:
+                if projectile.rect.colliderect(enemy.rect):
+                    try:
+                        projectiles.remove(projectile)
+                    except ValueError:
+                        pass
+                    if isinstance(enemy, Boss):
+                        enemy.hp -= 1
+                        print(f'Boss touché ! HP restant : {enemy.hp}')
+                        if enemy.hp <= 0:
+                            level.enemies.remove(enemy)
+                    else:
+                        level.enemies.remove(enemy)
+                    break
 
         screen.fill(BLACK)
         level.draw(screen)
