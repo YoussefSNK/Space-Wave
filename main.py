@@ -12,6 +12,7 @@ YELLOW = (255, 255, 0)
 class Background:
     def __init__(self, image_path=None, speed=2):
         self.speed = speed
+        self.default_speed = speed
         if image_path:
             self.image = pygame.image.load(image_path).convert()
             self.image = pygame.transform.scale(self.image, (SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -100,6 +101,13 @@ class Level:
         for enemy in self.enemies:
             enemy.update()
         self.enemies = [e for e in self.enemies if e.rect.top < SCREEN_HEIGHT]
+
+        if any(isinstance(enemy, Boss) for enemy in self.enemies):
+            if self.background.speed > 0:
+                self.background.speed = max(self.background.speed - 0.05, 0)
+        else:
+            if self.background.speed < self.background.default_speed:
+                self.background.speed = min(self.background.speed + 0.05, self.background.default_speed)
 
     def draw(self, surface):
         self.background.draw(surface)
