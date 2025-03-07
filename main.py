@@ -8,6 +8,7 @@ BLACK   = (0, 0, 0)
 RED     = (255, 0, 0)
 GREEN   = (0, 255, 0)
 YELLOW  = (255, 255, 0)
+WHITE   = (255, 255, 255)
 
 class Background:
     def __init__(self, image_path=None, speed=2):
@@ -22,7 +23,7 @@ class Background:
             for _ in range(100):
                 x = random.randint(0, SCREEN_WIDTH)
                 y = random.randint(0, SCREEN_HEIGHT)
-                pygame.draw.circle(self.image, (255, 255, 255), (x, y), 1)
+                pygame.draw.circle(self.image, WHITE, (x, y), 1)
         self.y1 = 0
         self.y2 = -SCREEN_HEIGHT
 
@@ -191,7 +192,11 @@ class Player:
         self.rect = self.image.get_rect(center=(x, y))
         self.shoot_delay = 250
         self.last_shot = pygame.time.get_ticks()
-        self.hp = 100
+        self.hp = 10
+        self.contact_damage = 1
+        self.invulnerable = False
+        self.invuln_duration = 500 
+        self.invuln_start = 0
 
     def update(self):
         pos = pygame.mouse.get_pos()
@@ -288,9 +293,9 @@ def main():
         player.draw(screen)
 
         font = pygame.font.SysFont(None, 36)
-        timer_text = font.render(f"Timer: {level.timer}", True, (255, 255, 255))
+        timer_text = font.render(f"Timer: {level.timer}", True, WHITE)
         screen.blit(timer_text, (10, 10))
-        hp_text = font.render(f"HP: {player.hp}", True, (255, 255, 255))
+        hp_text = font.render(f"HP: {player.hp}", True, WHITE)
         screen.blit(hp_text, (10, 50))
 
         pygame.display.flip()
