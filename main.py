@@ -39,13 +39,44 @@ class Background:
         surface.blit(self.image, (0, self.y1))
         surface.blit(self.image, (0, self.y2))
 
+
+class Explosion:
+    def __init__(self, x, y, duration=300):
+        self.x = x
+        self.y = y
+        self.duration = duration
+        self.start_time = pygame.time.get_ticks()
+        self.max_radius = 30
+
+    def update(self):
+        pass 
+
+    def draw(self, surface):
+        elapsed = pygame.time.get_ticks() - self.start_time
+        if elapsed > self.duration:
+            return
+        progress = elapsed / self.duration
+        if progress < 0.5:
+            radius = int(self.max_radius * (progress * 2))
+        else:
+            radius = int(self.max_radius * (1 - (progress - 0.5) * 2))
+        if radius < 1:
+            radius = 1
+        alpha = int(255 * (1 - progress))
+        explosion_surf = pygame.Surface((radius*2, radius*2), pygame.SRCALPHA)
+        pygame.draw.circle(explosion_surf, (255, 255, 0, alpha), (radius, radius), radius)
+        surface.blit(explosion_surf, (self.x - radius, self.y - radius))
+
+    def is_finished(self):
+        return pygame.time.get_ticks() - self.start_time > self.duration
+
 class Enemy:
     def __init__(self, x, y, speed=3):
         self.image = pygame.Surface((40, 40))
         self.image.fill(RED)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
-        self.hp = 1
+        self.hp = 2
 
     def update(self):
         self.rect.y += self.speed
@@ -201,6 +232,10 @@ class Player:
     def update(self):
         pos = pygame.mouse.get_pos()
         self.rect.center = pos
+        if self.invulnerable:
+            now = pygame.time.get_ticks()
+            if now - self.invuln_start >= self.invuln_duration:
+                self.invulnerable = False
 
     def shoot(self, projectile_list):
         now = pygame.time.get_ticks()
@@ -210,7 +245,12 @@ class Player:
             self.last_shot = now
 
     def draw(self, surface):
-        surface.blit(self.image, self.rect)
+        if self.invulnerable:
+            temp_img = self.image.copy()
+            pygame.draw.rect(temp_img, YELLOW, temp_img.get_rect(), 3)
+            surface.blit(temp_img, self.rect)
+        else:
+            surface.blit(self.image, self.rect)
 
 def main():
     pygame.init()
@@ -223,6 +263,7 @@ def main():
     player = Player(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100)
     projectiles = []
     enemy_projectiles = []
+    explosions = []
 
     while running:
         for event in pygame.event.get():
@@ -261,6 +302,7 @@ def main():
                             level.enemies.remove(enemy)
                     else:
                         level.enemies.remove(enemy)
+                    explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
                     break
 
         for e_proj in enemy_projectiles[:]:
@@ -269,20 +311,37 @@ def main():
                     enemy_projectiles.remove(e_proj)
                 except ValueError:
                     pass
-                player.hp -= 1
-                print(f'Player touché par projectile ! HP restant : {player.hp}')
-                if player.hp <= 0:
-                    print("Player éliminé ! Game Over.")
-                    running = False
+                if not player.invulnerable:
+                    player.hp -= 1
+                    print(f'Player touché par projectile ! HP restant : {player.hp}')
+                    if player.hp <= 0:
+                        print("Player éliminé ! Game Over.")
+                        running = False
+                    else:
+                        player.invulnerable = True
+                        player.invuln_start = pygame.time.get_ticks()
 
         for enemy in level.enemies[:]:
             if enemy.rect.colliderect(player.rect):
-                level.enemies.remove(enemy)
-                player.hp -= 1
-                print(f'Player touché par ennemi ! HP restant : {player.hp}')
-                if player.hp <= 0:
-                    print("Player éliminé ! Game Over.")
-                    running = False
+                if not player.invulnerable:
+                    player.hp -= player.contact_damage
+                    print(f'Player touché par ennemi ! HP restant : {player.hp}')
+                    enemy.hp -= player.contact_damage
+                    impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
+                    impact_y = (player.rect.centery + enemy.rect.centery) // 2
+                    explosions.append(Explosion(impact_x, impact_y))
+                    if enemy.hp <= 0:
+                        level.enemies.remove(enemy)
+                    if player.hp <= 0:
+                        print("Player éliminé ! Game Over.")
+                        running = False
+                    else:
+                        player.invulnerable = True
+                        player.invuln_start = pygame.time.get_ticks()
+
+        for exp in explosions:
+            exp.update()
+        explosions = [exp for exp in explosions if not exp.is_finished()]
 
         screen.fill(BLACK)
         level.draw(screen)
@@ -291,6 +350,8 @@ def main():
         for e_proj in enemy_projectiles:
             e_proj.draw(screen)
         player.draw(screen)
+        for exp in explosions:
+            exp.draw(screen)
 
         font = pygame.font.SysFont(None, 36)
         timer_text = font.render(f"Timer: {level.timer}", True, WHITE)
