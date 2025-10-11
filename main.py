@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 1000
 FPS = 60
@@ -9,6 +10,8 @@ RED     = (255, 0, 0)
 GREEN   = (0, 255, 0)
 YELLOW  = (255, 255, 0)
 WHITE   = (255, 255, 255)
+CYAN    = (0, 255, 255)
+ORANGE  = (255, 165, 0)
 
 class Background:
     def __init__(self, image_path=None, speed=2):
@@ -70,30 +73,195 @@ class Explosion:
     def is_finished(self):
         return pygame.time.get_ticks() - self.start_time > self.duration
 
+
+class MovementPattern:
+    """Classe de base pour les patterns de mouvement"""
+    def update(self, enemy):
+        pass
+
+
+class SineWavePattern(MovementPattern):
+    """Mouvement sinusoïdal (vague)"""
+    def __init__(self, amplitude=100, frequency=0.05, base_speed=3):
+        self.amplitude = amplitude
+        self.frequency = frequency
+        self.base_speed = base_speed
+
+    def update(self, enemy):
+        enemy.rect.y += self.base_speed
+        offset_x = math.sin(enemy.timer * self.frequency) * self.amplitude
+        enemy.rect.x = enemy.start_x + offset_x
+
+
+class ZigZagPattern(MovementPattern):
+    """Mouvement en zigzag"""
+    def __init__(self, amplitude=80, switch_time=30, base_speed=3):
+        self.amplitude = amplitude
+        self.switch_time = switch_time
+        self.base_speed = base_speed
+
+    def update(self, enemy):
+        enemy.rect.y += self.base_speed
+        direction = 1 if (enemy.timer // self.switch_time) % 2 == 0 else -1
+        enemy.rect.x += direction * 3
+
+
+class CirclePattern(MovementPattern):
+    """Mouvement circulaire"""
+    def __init__(self, radius=60, angular_speed=0.08, base_speed=2):
+        self.radius = radius
+        self.angular_speed = angular_speed
+        self.base_speed = base_speed
+
+    def update(self, enemy):
+        enemy.rect.y += self.base_speed
+        angle = enemy.timer * self.angular_speed
+        offset_x = math.cos(angle) * self.radius
+        offset_y = math.sin(angle) * self.radius
+        enemy.rect.x = enemy.start_x + offset_x
+        enemy.rect.centery = enemy.start_y + (enemy.timer * self.base_speed) + offset_y
+
+
+class SwoopPattern(MovementPattern):
+    """Mouvement en piqué puis remontée latérale"""
+    def __init__(self, swoop_direction=1):
+        self.swoop_direction = swoop_direction  # 1 pour droite, -1 pour gauche
+        self.phase = 0
+
+    def update(self, enemy):
+        if enemy.timer < 60: 
+            enemy.rect.y += 5
+        elif enemy.timer < 120:
+            enemy.rect.y += 2
+            enemy.rect.x += self.swoop_direction * 4
+        else:
+            enemy.rect.y -= 1
+            enemy.rect.x += self.swoop_direction * 3
+
+
+class HorizontalWavePattern(MovementPattern):
+    """Se déplace horizontalement avec légère descente"""
+    def __init__(self, direction=1, speed=4):
+        self.direction = direction
+        self.speed = speed
+
+    def update(self, enemy):
+        enemy.rect.x += self.direction * self.speed
+        enemy.rect.y += 1
+        if enemy.rect.left <= 0 or enemy.rect.right >= SCREEN_WIDTH:
+            self.direction *= -1
+
+
 class Enemy:
-    def __init__(self, x, y, speed=3):
+    def __init__(self, x, y, speed=3, movement_pattern=None):
         self.image = pygame.Surface((40, 40))
         self.image.fill(RED)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
         self.hp = 2
+        self.movement_pattern = movement_pattern
+        self.timer = 0
+        self.start_x = x
+        self.start_y = y
 
     def update(self):
-        self.rect.y += self.speed
+        self.timer += 1
+        if self.movement_pattern:
+            self.movement_pattern.update(self)
+        else:
+            self.rect.y += self.speed
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
 
 class Boss(Enemy):
-    def __init__(self, x, y, speed=1):
+    def __init__(self, x, y, speed=2, target_y=150):
         super().__init__(x, y, speed)
         self.image = pygame.Surface((100, 100))
         self.image.fill((255, 100, 0))
         self.rect = self.image.get_rect(center=(x, y))
-        self.hp = 5
+        self.hp = 20
+        self.target_y = target_y
+        self.in_position = False
+        self.timer = 0
+        self.shoot_delay_frames = 20
+        self.last_shot_frame = 0
+        self.current_pattern = 0
+        self.pattern_switch_interval = 300
+        self.lateral_movement_speed = 2
+        self.lateral_direction = 1
 
-    def update(self):
-        self.rect.y += self.speed
+    def update(self, player_position=None, enemy_projectiles=None):
+        self.timer += 1
+
+        if not self.in_position:
+            if self.rect.centery < self.target_y:
+                self.rect.y += self.speed
+            else:
+                self.in_position = True
+                print("Boss en position de combat!")
+        else:
+            self.rect.x += self.lateral_direction * self.lateral_movement_speed
+            if self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH:
+                self.lateral_direction *= -1
+
+            if player_position and enemy_projectiles is not None:
+                if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
+                    self.last_shot_frame = self.timer
+                    pattern_index = (self.timer // self.pattern_switch_interval) % 4
+                    projectiles = self.shoot_pattern(pattern_index, player_position)
+                    enemy_projectiles.extend(projectiles)
+
+    def shoot_pattern(self, pattern_index, player_position):
+        """Retourne une liste de projectiles selon le pattern"""
+        projectiles = []
+        bx, by = self.rect.center
+
+        if pattern_index == 0:
+            projectiles.append(self._create_aimed_projectile(player_position))
+            print("Boss: Tir direct!")
+
+        elif pattern_index == 1:
+            angles = [-30, -15, 0, 15, 30]
+            for angle_deg in angles:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)
+                projectiles.append(BossProjectile(bx, by, dx, dy, speed=6))
+            print("Boss: Tir en éventail!")
+
+        elif pattern_index == 2:
+            num_projectiles = 8
+            for i in range(num_projectiles):
+                angle = (2 * math.pi / num_projectiles) * i
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                projectiles.append(BossProjectile(bx, by, dx, dy, speed=5))
+            print("Boss: Tir circulaire!")
+
+        elif pattern_index == 3:
+            offsets = [(-20, 0), (0, 0), (20, 0)]
+            for offset_x, offset_y in offsets:
+                proj = self._create_aimed_projectile(player_position, offset_x, offset_y)
+                projectiles.append(proj)
+            print("Boss: Triple tir!")
+
+        return projectiles
+
+    def _create_aimed_projectile(self, player_position, offset_x=0, offset_y=0):
+        """Crée un projectile visant le joueur"""
+        bx, by = self.rect.center
+        bx += offset_x
+        by += offset_y
+        px, py = player_position
+        dx = px - bx
+        dy = py - by
+        dist = math.sqrt(dx**2 + dy**2)
+        if dist == 0:
+            dist = 1
+        dx /= dist
+        dy /= dist
+        return BossProjectile(bx, by, dx, dy, speed=7)
 
 
 class ShootingEnemy(Enemy):
@@ -136,13 +304,51 @@ class EnemyProjectile:
         self.dx = dx
         self.dy = dy
         self.speed = speed
+        self.trail = []
+        self.max_trail_length = 5
 
     def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
         self.rect.x += int(self.dx * self.speed)
         self.rect.y += int(self.dy * self.speed)
 
     def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            alpha = int(255 * (i / len(self.trail)))
+            size = max(1, int(3 * (i / len(self.trail))))
+            color = (RED[0], RED[1], RED[2], alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
         surface.blit(self.image, self.rect)
+
+
+class BossProjectile(EnemyProjectile):
+    """Projectiles du Boss - Plus gros et plus visibles"""
+    def __init__(self, x, y, dx, dy, speed=7):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((15, 15))  # 3x plus gros
+        self.image.fill(ORANGE)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 8
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            progress = i / len(self.trail) if len(self.trail) > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(7 * progress))
+            color = (255, int(100 + 65 * progress), 0, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, ORANGE, self.rect.center, 7)
+        pygame.draw.circle(surface, RED, self.rect.center, 5)
+        pygame.draw.circle(surface, YELLOW, self.rect.center, 2)
 
 class Level:
     def __init__(self):
@@ -150,9 +356,14 @@ class Level:
         self.timer = 0
         self.enemies = []
         self.spawn_events = [
-            (180, lambda: self.spawn_enemies(3)),   # À 3 secondes, spawn 3
-            (600, lambda: self.spawn_enemies(5)),
+            (180, lambda: self.spawn_enemies(3)),
+            (300, lambda: self.spawn_formation_v(5)),
+            (480, lambda: self.spawn_sine_wave_group(4)),
+            (600, lambda: self.spawn_zigzag_group(3)),
+            (720, lambda: self.spawn_formation_line(6)),
+            (840, lambda: self.spawn_swoop_attack()),
             (900, lambda: self.spawn_shooting_enemy(1)),
+            (1020, lambda: self.spawn_horizontal_squadron()),
             (1200, lambda: self.spawn_boss())
         ]
         self.spawn_events.sort(key=lambda event: event[0])
@@ -176,6 +387,77 @@ class Level:
         self.enemies.append(boss)
         print(f'Spawned boss at timer {self.timer}')
 
+    def spawn_formation_v(self, count):
+        """Spawn des ennemis en formation V"""
+        center_x = SCREEN_WIDTH // 2
+        spacing = 60
+        for i in range(count):
+            offset = (i - count // 2) * spacing
+            y_offset = abs(i - count // 2) * 30
+            enemy = Enemy(center_x + offset, -20 - y_offset, speed=2.5)
+            enemy.image.fill(CYAN)
+            self.enemies.append(enemy)
+        print(f'Spawned V formation with {count} enemies at timer {self.timer}')
+
+    def spawn_formation_line(self, count):
+        """Spawn des ennemis en ligne horizontale"""
+        spacing = SCREEN_WIDTH // (count + 1)
+        for i in range(count):
+            x = spacing * (i + 1)
+            enemy = Enemy(x, -20, speed=2)
+            enemy.image.fill(ORANGE)
+            self.enemies.append(enemy)
+        print(f'Spawned line formation with {count} enemies at timer {self.timer}')
+
+    def spawn_sine_wave_group(self, count):
+        """Spawn des ennemis avec mouvement sinusoïdal"""
+        spacing = SCREEN_WIDTH // (count + 1)
+        for i in range(count):
+            x = spacing * (i + 1)
+            pattern = SineWavePattern(amplitude=80, frequency=0.05, base_speed=2.5)
+            enemy = Enemy(x, -20, movement_pattern=pattern)
+            enemy.image.fill((255, 100, 200))
+            self.enemies.append(enemy)
+        print(f'Spawned {count} sine wave enemies at timer {self.timer}')
+
+    def spawn_zigzag_group(self, count):
+        """Spawn des ennemis avec mouvement zigzag"""
+        spacing = SCREEN_WIDTH // (count + 1)
+        for i in range(count):
+            x = spacing * (i + 1)
+            pattern = ZigZagPattern(amplitude=60, switch_time=25, base_speed=3)
+            enemy = Enemy(x, -20, movement_pattern=pattern)
+            enemy.image.fill((100, 255, 100))
+            self.enemies.append(enemy)
+        print(f'Spawned {count} zigzag enemies at timer {self.timer}')
+
+    def spawn_swoop_attack(self):
+        """Spawn des ennemis qui font un piqué depuis les côtés"""
+        # Ennemi gauche qui pique à droite
+        pattern_right = SwoopPattern(swoop_direction=1)
+        enemy_left = Enemy(50, -20, movement_pattern=pattern_right)
+        enemy_left.image.fill((255, 200, 0))
+        self.enemies.append(enemy_left)
+
+        # Ennemi droit qui pique à gauche
+        pattern_left = SwoopPattern(swoop_direction=-1)
+        enemy_right = Enemy(SCREEN_WIDTH - 50, -20, movement_pattern=pattern_left)
+        enemy_right.image.fill((255, 200, 0))
+        self.enemies.append(enemy_right)
+        print(f'Spawned swoop attack at timer {self.timer}')
+
+    def spawn_horizontal_squadron(self):
+        """Spawn une escadrille qui se déplace horizontalement"""
+        y_positions = [-20, -80, -140]
+        for i, y in enumerate(y_positions):
+            direction = 1 if i % 2 == 0 else -1
+            start_x = 50 if direction == 1 else SCREEN_WIDTH - 50
+            pattern = HorizontalWavePattern(direction=direction, speed=5)
+            enemy = Enemy(start_x, y, movement_pattern=pattern)
+            enemy.image.fill((150, 150, 255))
+            self.enemies.append(enemy)
+        print(f'Spawned horizontal squadron at timer {self.timer}')
+
     def update(self):
         self.background.update()
         self.timer += 1
@@ -187,9 +469,9 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            if not isinstance(enemy, ShootingEnemy):
+            if not isinstance(enemy, (ShootingEnemy, Boss)):
                 enemy.update()
-        self.enemies = [e for e in self.enemies if e.rect.top < SCREEN_HEIGHT]
+        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, Boss))]
 
         if any(isinstance(enemy, Boss) for enemy in self.enemies):
             if self.background.speed > 0:
@@ -209,11 +491,26 @@ class Projectile:
         self.image.fill(YELLOW)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
+        self.trail = []
+        self.max_trail_length = 6
 
     def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
         self.rect.y -= self.speed
 
     def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            progress = i / len(self.trail) if len(self.trail) > 0 else 0
+            alpha = int(255 * progress)
+            size = max(1, int(4 * progress))
+            color = (int(200 + 55 * progress), 255, 0, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
         surface.blit(self.image, self.rect)
 
 class Player:
@@ -279,7 +576,9 @@ def main():
         projectiles = [p for p in projectiles if p.rect.bottom > 0]
 
         for enemy in level.enemies:
-            if isinstance(enemy, ShootingEnemy):
+            if isinstance(enemy, Boss):
+                enemy.update(player.rect.center, enemy_projectiles)
+            elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
 
         for e_proj in enemy_projectiles:
