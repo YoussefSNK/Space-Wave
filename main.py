@@ -74,6 +74,40 @@ class Explosion:
         return pygame.time.get_ticks() - self.start_time > self.duration
 
 
+class PowerUp:
+    """Power-up qui tombe et améliore les tirs du joueur"""
+    def __init__(self, x, y, power_type='double'):
+        self.power_type = power_type
+        self.image = pygame.Surface((30, 30))
+
+        if power_type == 'double':
+            self.color = CYAN
+        elif power_type == 'triple':
+            self.color = (255, 0, 255)
+        elif power_type == 'spread':
+            self.color = (0, 255, 100)
+        else:
+            self.color = WHITE
+
+        self.image.fill(self.color)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = 3
+        self.angle = 0
+
+    def update(self):
+        self.rect.y += self.speed
+        self.angle += 5
+
+    def draw(self, surface):
+        rotated = pygame.transform.rotate(self.image, self.angle)
+        new_rect = rotated.get_rect(center=self.rect.center)
+
+        pulse = abs(math.sin(self.angle * 0.1)) * 10 + 5
+        pygame.draw.circle(surface, self.color, self.rect.center, int(20 + pulse), 2)
+
+        surface.blit(rotated, new_rect)
+
+
 class MovementPattern:
     """Classe de base pour les patterns de mouvement"""
     def update(self, enemy):
@@ -513,6 +547,24 @@ class Projectile:
 
         surface.blit(self.image, self.rect)
 
+
+class SpreadProjectile(Projectile):
+    """Projectile qui se déplace en diagonale pour le tir en éventail"""
+    def __init__(self, x, y, speed=10, angle=15):
+        super().__init__(x, y, speed)
+        self.angle = angle
+        angle_rad = math.radians(angle)
+        self.dx = math.sin(angle_rad) * speed
+        self.dy = -math.cos(angle_rad) * speed
+
+    def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx)
+        self.rect.y += int(self.dy)
+
 class Player:
     def __init__(self, x, y):
         self.image = pygame.Surface((50, 50), pygame.SRCALPHA)
@@ -526,6 +578,10 @@ class Player:
         self.invuln_duration = 500 
         self.invuln_start = 0
 
+        self.power_type = 'normal'  # 'normal', 'double', 'triple', 'spread'
+        self.power_duration = 15000
+        self.power_start = 0
+
     def update(self):
         pos = pygame.mouse.get_pos()
         self.rect.center = pos
@@ -534,11 +590,42 @@ class Player:
             if now - self.invuln_start >= self.invuln_duration:
                 self.invulnerable = False
 
+        if self.power_type != 'normal':
+            now = pygame.time.get_ticks()
+            if now - self.power_start >= self.power_duration:
+                self.power_type = 'normal'
+                print("Power-up expiré!")
+
+    def apply_powerup(self, power_type):
+        """Applique un power-up au joueur"""
+        self.power_type = power_type
+        self.power_start = pygame.time.get_ticks()
+        print(f"Power-up '{power_type}' activé!")
+
     def shoot(self, projectile_list):
         now = pygame.time.get_ticks()
         if now - self.last_shot >= self.shoot_delay:
-            projectile = Projectile(self.rect.centerx, self.rect.top)
-            projectile_list.append(projectile)
+            cx, cy = self.rect.centerx, self.rect.top
+
+            if self.power_type == 'normal':
+                projectile_list.append(Projectile(cx, cy))
+
+            elif self.power_type == 'double':
+                offset = 15
+                projectile_list.append(Projectile(cx - offset, cy))
+                projectile_list.append(Projectile(cx + offset, cy))
+
+            elif self.power_type == 'triple':
+                offset = 20
+                projectile_list.append(Projectile(cx - offset, cy))
+                projectile_list.append(Projectile(cx, cy))
+                projectile_list.append(Projectile(cx + offset, cy))
+
+            elif self.power_type == 'spread':
+                projectile_list.append(SpreadProjectile(cx, cy, angle=-15))
+                projectile_list.append(Projectile(cx, cy))  # Centre
+                projectile_list.append(SpreadProjectile(cx, cy, angle=15))
+
             self.last_shot = now
 
     def draw(self, surface):
@@ -548,6 +635,25 @@ class Player:
             surface.blit(temp_img, self.rect)
         else:
             surface.blit(self.image, self.rect)
+
+        if self.power_type != 'normal':
+            time_left = self.power_duration - (pygame.time.get_ticks() - self.power_start)
+            progress = time_left / self.power_duration
+            bar_width = 50
+            bar_height = 5
+            bar_x = self.rect.centerx - bar_width // 2
+            bar_y = self.rect.bottom + 10
+
+            pygame.draw.rect(surface, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+            if self.power_type == 'double':
+                color = CYAN
+            elif self.power_type == 'triple':
+                color = (255, 0, 255)
+            elif self.power_type == 'spread':
+                color = (0, 255, 100)
+            else:
+                color = WHITE
+            pygame.draw.rect(surface, color, (bar_x, bar_y, int(bar_width * progress), bar_height))
 
 def main():
     pygame.init()
@@ -561,6 +667,7 @@ def main():
     projectiles = []
     enemy_projectiles = []
     explosions = []
+    powerups = []
 
     while running:
         for event in pygame.event.get():
@@ -598,6 +705,11 @@ def main():
                         enemy.hp -= 1
                         print(f'Boss touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0:
+                            power_types = ['double', 'triple', 'spread']
+                            chosen_power = random.choice(power_types)
+                            powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
+                            powerups.append(powerup)
+                            print(f"Boss vaincu ! Power-up '{chosen_power}' largué !")
                             level.enemies.remove(enemy)
                     else:
                         level.enemies.remove(enemy)
@@ -642,12 +754,26 @@ def main():
             exp.update()
         explosions = [exp for exp in explosions if not exp.is_finished()]
 
+        for powerup in powerups:
+            powerup.update()
+        powerups = [p for p in powerups if p.rect.top < SCREEN_HEIGHT]
+
+        for powerup in powerups[:]:
+            if powerup.rect.colliderect(player.rect):
+                player.apply_powerup(powerup.power_type)
+                try:
+                    powerups.remove(powerup)
+                except ValueError:
+                    pass
+
         screen.fill(BLACK)
         level.draw(screen)
         for projectile in projectiles:
             projectile.draw(screen)
         for e_proj in enemy_projectiles:
             e_proj.draw(screen)
+        for powerup in powerups:
+            powerup.draw(screen)
         player.draw(screen)
         for exp in explosions:
             exp.draw(screen)
