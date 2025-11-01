@@ -211,8 +211,8 @@ class Enemy:
 class Boss(Enemy):
     def __init__(self, x, y, speed=2, target_y=150):
         super().__init__(x, y, speed)
-        self.image = pygame.Surface((100, 100))
-        self.image.fill((255, 100, 0))
+        self.image = pygame.image.load("sprites/Miedd.png").convert_alpha()
+        self.image = pygame.transform.scale(self.image, (100, 100))
         self.rect = self.image.get_rect(center=(x, y))
         self.hp = 20
         self.target_y = target_y
