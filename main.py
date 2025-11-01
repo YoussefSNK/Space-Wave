@@ -51,6 +51,13 @@ class Explosion:
         self.start_time = pygame.time.get_ticks()
         self.max_radius = 30
 
+        self.explosion_cache = {}
+        for radius in range(1, self.max_radius + 1):
+            for alpha in range(0, 256, 10):  # pour échantillonner alpha tous les 10 ?
+                explosion_surf = pygame.Surface((radius*2, radius*2), pygame.SRCALPHA)
+                pygame.draw.circle(explosion_surf, (255, 255, 0, alpha), (radius, radius), radius)
+                self.explosion_cache[(radius, alpha)] = explosion_surf
+
     def update(self):
         pass 
 
@@ -66,9 +73,10 @@ class Explosion:
         if radius < 1:
             radius = 1
         alpha = int(255 * (1 - progress))
-        explosion_surf = pygame.Surface((radius*2, radius*2), pygame.SRCALPHA)
-        pygame.draw.circle(explosion_surf, (255, 255, 0, alpha), (radius, radius), radius)
-        surface.blit(explosion_surf, (self.x - radius, self.y - radius))
+        alpha_rounded = (alpha // 10) * 10
+        explosion_surf = self.explosion_cache.get((radius, alpha_rounded))
+        if explosion_surf:
+            surface.blit(explosion_surf, (self.x - radius, self.y - radius))
 
     def is_finished(self):
         return pygame.time.get_ticks() - self.start_time > self.duration
@@ -341,6 +349,16 @@ class EnemyProjectile:
         self.trail = []
         self.max_trail_length = 5
 
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(1, int(3 * progress))
+            color = (RED[0], RED[1], RED[2], alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
     def update(self):
         self.trail.append(self.rect.center)
         if len(self.trail) > self.max_trail_length:
@@ -351,11 +369,7 @@ class EnemyProjectile:
 
     def draw(self, surface):
         for i, pos in enumerate(self.trail):
-            alpha = int(255 * (i / len(self.trail)))
-            size = max(1, int(3 * (i / len(self.trail))))
-            color = (RED[0], RED[1], RED[2], alpha)
-            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
-            pygame.draw.circle(trail_surf, color, (size, size), size)
+            trail_surf, size = self.trail_cache[i]
             surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
 
         surface.blit(self.image, self.rect)
@@ -370,14 +384,19 @@ class BossProjectile(EnemyProjectile):
         self.rect = self.image.get_rect(center=(x, y))
         self.max_trail_length = 8
 
-    def draw(self, surface):
-        for i, pos in enumerate(self.trail):
-            progress = i / len(self.trail) if len(self.trail) > 0 else 0
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
             alpha = int(255 * progress)
             size = max(2, int(7 * progress))
             color = (255, int(100 + 65 * progress), 0, alpha)
             trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
             pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
             surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
 
         pygame.draw.circle(surface, ORANGE, self.rect.center, 7)
@@ -528,6 +547,16 @@ class Projectile:
         self.trail = []
         self.max_trail_length = 6
 
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(1, int(4 * progress))
+            color = (int(200 + 55 * progress), 255, 0, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
     def update(self):
         self.trail.append(self.rect.center)
         if len(self.trail) > self.max_trail_length:
@@ -537,12 +566,7 @@ class Projectile:
 
     def draw(self, surface):
         for i, pos in enumerate(self.trail):
-            progress = i / len(self.trail) if len(self.trail) > 0 else 0
-            alpha = int(255 * progress)
-            size = max(1, int(4 * progress))
-            color = (int(200 + 55 * progress), 255, 0, alpha)
-            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
-            pygame.draw.circle(trail_surf, color, (size, size), size)
+            trail_surf, size = self.trail_cache[i]
             surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
 
         surface.blit(self.image, self.rect)
