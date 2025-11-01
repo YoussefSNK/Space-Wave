@@ -713,8 +713,8 @@ class SpreadProjectile(Projectile):
 
 class Player:
     def __init__(self, x, y):
-        self.image = pygame.Surface((50, 50), pygame.SRCALPHA)
-        pygame.draw.polygon(self.image, GREEN, [(25, 0), (0, 50), (50, 50)])
+        self.image = pygame.image.load("sprites/Spaceship.png").convert_alpha()
+        self.image = pygame.transform.scale(self.image, (50, 50))
         self.rect = self.image.get_rect(center=(x, y))
         self.shoot_delay = 250
         self.last_shot = pygame.time.get_ticks()
