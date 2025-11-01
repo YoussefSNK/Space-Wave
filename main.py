@@ -219,8 +219,15 @@ class Enemy:
 class Boss(Enemy):
     def __init__(self, x, y, speed=2, target_y=150):
         super().__init__(x, y, speed)
-        self.image = pygame.image.load("sprites/Miedd.png").convert_alpha()
-        self.image = pygame.transform.scale(self.image, (100, 100))
+
+        self.sprite_normal = pygame.image.load("sprites/Miedd.png").convert_alpha()
+        self.sprite_normal = pygame.transform.scale(self.sprite_normal, (100, 100))
+        self.sprite_shoot_1 = pygame.image.load("sprites/Miedd_shoot_1.png").convert_alpha()
+        self.sprite_shoot_1 = pygame.transform.scale(self.sprite_shoot_1, (100, 100))
+        self.sprite_shoot_2 = pygame.image.load("sprites/Miedd_shoot_2.png").convert_alpha()
+        self.sprite_shoot_2 = pygame.transform.scale(self.sprite_shoot_2, (100, 100))
+
+        self.image = self.sprite_normal
         self.rect = self.image.get_rect(center=(x, y))
         self.hp = 20
         self.target_y = target_y
@@ -232,6 +239,12 @@ class Boss(Enemy):
         self.pattern_switch_interval = 300
         self.lateral_movement_speed = 2
         self.lateral_direction = 1
+
+        self.shoot_animation_frames = [self.sprite_shoot_1, self.sprite_shoot_2, self.sprite_shoot_1, self.sprite_normal]
+        self.current_animation_frame = 0
+        self.animation_active = False
+        self.frames_per_animation_step = 3
+        self.animation_timer = 0
 
         self.eye_left_center = (32, 35)
         self.eye_left_radius_x = 11
@@ -245,6 +258,18 @@ class Boss(Enemy):
 
     def update(self, player_position=None, enemy_projectiles=None):
         self.timer += 1
+
+        if self.animation_active:
+            self.animation_timer += 1
+            if self.animation_timer >= self.frames_per_animation_step:
+                self.animation_timer = 0
+                self.current_animation_frame += 1
+                if self.current_animation_frame >= len(self.shoot_animation_frames):
+                    self.animation_active = False
+                    self.current_animation_frame = 0
+                    self.image = self.sprite_normal
+                else:
+                    self.image = self.shoot_animation_frames[self.current_animation_frame]
 
         if not self.in_position:
             if self.rect.centery < self.target_y:
@@ -263,6 +288,11 @@ class Boss(Enemy):
                     pattern_index = (self.timer // self.pattern_switch_interval) % 4
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
+
+                    self.animation_active = True
+                    self.current_animation_frame = 0
+                    self.animation_timer = 0
+                    self.image = self.shoot_animation_frames[0]
 
         # calcul offset yeux qui suivent J1
         if player_position:
@@ -297,7 +327,8 @@ class Boss(Enemy):
     def shoot_pattern(self, pattern_index, player_position):
         """Retourne une liste de projectiles selon le pattern"""
         projectiles = []
-        bx, by = self.rect.center
+        bx = self.rect.left + 51
+        by = self.rect.top + 72
 
         if pattern_index == 0:
             projectiles.append(self._create_aimed_projectile(player_position))
@@ -332,9 +363,8 @@ class Boss(Enemy):
 
     def _create_aimed_projectile(self, player_position, offset_x=0, offset_y=0):
         """Crée un projectile visant le joueur"""
-        bx, by = self.rect.center
-        bx += offset_x
-        by += offset_y
+        bx = self.rect.left + 51 + offset_x
+        by = self.rect.top + 72 + offset_y
         px, py = player_position
         dx = px - bx
         dy = py - by
