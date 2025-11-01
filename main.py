@@ -253,7 +253,7 @@ class Boss(Enemy):
         self.damage_animation_active = False
         self.damage_animation_duration = 20
         self.damage_animation_timer = 0
-        self.damage_flash_interval = 6
+        self.damage_flash_interval = 5
 
         self.eye_left_center = (32, 35)
         self.eye_left_radius_x = 11
