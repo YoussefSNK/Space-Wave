@@ -226,6 +226,10 @@ class Boss(Enemy):
         self.sprite_shoot_1 = pygame.transform.scale(self.sprite_shoot_1, (100, 100))
         self.sprite_shoot_2 = pygame.image.load("sprites/Miedd_shoot_2.png").convert_alpha()
         self.sprite_shoot_2 = pygame.transform.scale(self.sprite_shoot_2, (100, 100))
+        self.sprite_damaged_1 = pygame.image.load("sprites/Miedd_damaged.png").convert_alpha()
+        self.sprite_damaged_1 = pygame.transform.scale(self.sprite_damaged_1, (100, 100))
+        self.sprite_damaged_2 = pygame.image.load("sprites/Miedd_damaged_2.png").convert_alpha()
+        self.sprite_damaged_2 = pygame.transform.scale(self.sprite_damaged_2, (100, 100))
 
         self.image = self.sprite_normal
         self.rect = self.image.get_rect(center=(x, y))
@@ -246,6 +250,11 @@ class Boss(Enemy):
         self.frames_per_animation_step = 3
         self.animation_timer = 0
 
+        self.damage_animation_active = False
+        self.damage_animation_duration = 20
+        self.damage_animation_timer = 0
+        self.damage_flash_interval = 6
+
         self.eye_left_center = (32, 35)
         self.eye_left_radius_x = 11
         self.eye_left_radius_y = 9
@@ -259,7 +268,21 @@ class Boss(Enemy):
     def update(self, player_position=None, enemy_projectiles=None):
         self.timer += 1
 
-        if self.animation_active:
+        # animation de dégâts (priorité sur l'animation de tir)
+        if self.damage_animation_active:
+            self.damage_animation_timer += 1
+            frame_in_cycle = (self.damage_animation_timer // self.damage_flash_interval) % 2
+            if frame_in_cycle == 0:
+                self.image = self.sprite_damaged_1
+            else:
+                self.image = self.sprite_damaged_2
+
+            if self.damage_animation_timer >= self.damage_animation_duration:
+                self.damage_animation_active = False
+                self.damage_animation_timer = 0
+                self.image = self.sprite_normal
+
+        elif self.animation_active:
             self.animation_timer += 1
             if self.animation_timer >= self.frames_per_animation_step:
                 self.animation_timer = 0
@@ -374,6 +397,12 @@ class Boss(Enemy):
         dx /= dist
         dy /= dist
         return BossProjectile(bx, by, dx, dy, speed=7)
+
+    def take_damage(self, amount=1):
+        """Applique des dégâts au boss et déclenche l'animation"""
+        self.hp -= amount
+        self.damage_animation_active = True
+        self.damage_animation_timer = 0
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
@@ -819,7 +848,7 @@ def main():
                     except ValueError:
                         pass
                     if isinstance(enemy, Boss):
-                        enemy.hp -= 1
+                        enemy.take_damage(1)
                         print(f'Boss touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0:
                             power_types = ['double', 'triple', 'spread']
@@ -854,7 +883,10 @@ def main():
                 if not player.invulnerable:
                     player.hp -= player.contact_damage
                     print(f'Player touché par ennemi ! HP restant : {player.hp}')
-                    enemy.hp -= player.contact_damage
+                    if isinstance(enemy, Boss):
+                        enemy.take_damage(player.contact_damage)
+                    else:
+                        enemy.hp -= player.contact_damage
                     impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
