@@ -205,6 +205,7 @@ class Enemy:
         self.timer = 0
         self.start_x = x
         self.start_y = y
+        self.drops_powerup = False
 
     def update(self):
         self.timer += 1
@@ -619,6 +620,11 @@ class Level:
         enemy_right = Enemy(SCREEN_WIDTH - 50, -20, movement_pattern=pattern_left)
         enemy_right.image.fill((255, 200, 0))
         self.enemies.append(enemy_right)
+
+        # l'un des deux drop
+        powerup_dropper = random.choice([enemy_left, enemy_right])
+        powerup_dropper.drops_powerup = True
+
         print(f'Spawned swoop attack at timer {self.timer}')
 
     def spawn_horizontal_squadron(self):
@@ -851,13 +857,15 @@ def main():
                         enemy.take_damage(1)
                         print(f'Boss touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0:
+                            level.enemies.remove(enemy)
+                            print("Boss vaincu !")
+                    else:
+                        if enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
                             powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
                             powerups.append(powerup)
-                            print(f"Boss vaincu ! Power-up '{chosen_power}' largué !")
-                            level.enemies.remove(enemy)
-                    else:
+                            print(f"Power-up '{chosen_power}' largué !")
                         level.enemies.remove(enemy)
                     explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
                     break
@@ -891,6 +899,12 @@ def main():
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
                     if enemy.hp <= 0:
+                        if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
+                            power_types = ['double', 'triple', 'spread']
+                            chosen_power = random.choice(power_types)
+                            powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
+                            powerups.append(powerup)
+                            print(f"Power-up '{chosen_power}' largué !")
                         level.enemies.remove(enemy)
                     if player.hp <= 0:
                         print("Player éliminé ! Game Over.")
