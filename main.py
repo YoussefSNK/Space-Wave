@@ -233,6 +233,16 @@ class Boss(Enemy):
         self.lateral_movement_speed = 2
         self.lateral_direction = 1
 
+        self.eye_left_center = (32, 35)
+        self.eye_left_radius_x = 11
+        self.eye_left_radius_y = 9
+        self.pupil_left_offset = (0, 0)
+
+        self.eye_right_center = (69, 36)
+        self.eye_right_radius_x = 13
+        self.eye_right_radius_y = 10
+        self.pupil_right_offset = (0, 0)
+
     def update(self, player_position=None, enemy_projectiles=None):
         self.timer += 1
 
@@ -253,6 +263,36 @@ class Boss(Enemy):
                     pattern_index = (self.timer // self.pattern_switch_interval) % 4
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
+
+        # calcul offset yeux qui suivent J1
+        if player_position:
+            px, py = player_position
+
+            eye_left_world_x = self.rect.left + self.eye_left_center[0]
+            eye_left_world_y = self.rect.top + self.eye_left_center[1]
+            dx_left = px - eye_left_world_x
+            dy_left = py - eye_left_world_y
+            dist_left = math.sqrt(dx_left**2 + dy_left**2)
+
+            if dist_left > 0:
+                dx_left /= dist_left
+                dy_left /= dist_left
+                max_offset_x_left = self.eye_left_radius_x - 3
+                max_offset_y_left = self.eye_left_radius_y - 3
+                self.pupil_left_offset = (dx_left * max_offset_x_left, dy_left * max_offset_y_left)
+
+            eye_right_world_x = self.rect.left + self.eye_right_center[0]
+            eye_right_world_y = self.rect.top + self.eye_right_center[1]
+            dx_right = px - eye_right_world_x
+            dy_right = py - eye_right_world_y
+            dist_right = math.sqrt(dx_right**2 + dy_right**2)
+
+            if dist_right > 0:
+                dx_right /= dist_right
+                dy_right /= dist_right
+                max_offset_x_right = self.eye_right_radius_x - 3
+                max_offset_y_right = self.eye_right_radius_y - 3
+                self.pupil_right_offset = (dx_right * max_offset_x_right, dy_right * max_offset_y_right)
 
     def shoot_pattern(self, pattern_index, player_position):
         """Retourne une liste de projectiles selon le pattern"""
@@ -304,6 +344,29 @@ class Boss(Enemy):
         dx /= dist
         dy /= dist
         return BossProjectile(bx, by, dx, dy, speed=7)
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
+
+        cross_size = 1
+
+        pupil_left_x = self.rect.left + self.eye_left_center[0] + int(self.pupil_left_offset[0])
+        pupil_left_y = self.rect.top + self.eye_left_center[1] + int(self.pupil_left_offset[1])
+        pygame.draw.line(surface, BLACK,
+                        (pupil_left_x - cross_size, pupil_left_y),
+                        (pupil_left_x + cross_size, pupil_left_y), 1)
+        pygame.draw.line(surface, BLACK,
+                        (pupil_left_x, pupil_left_y - cross_size),
+                        (pupil_left_x, pupil_left_y + cross_size), 1)
+
+        pupil_right_x = self.rect.left + self.eye_right_center[0] + int(self.pupil_right_offset[0])
+        pupil_right_y = self.rect.top + self.eye_right_center[1] + int(self.pupil_right_offset[1])
+        pygame.draw.line(surface, BLACK,
+                        (pupil_right_x - cross_size, pupil_right_y),
+                        (pupil_right_x + cross_size, pupil_right_y), 1)
+        pygame.draw.line(surface, BLACK,
+                        (pupil_right_x, pupil_right_y - cross_size),
+                        (pupil_right_x, pupil_right_y + cross_size), 1)
 
 
 class ShootingEnemy(Enemy):
