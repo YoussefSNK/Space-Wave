@@ -256,6 +256,13 @@ class Boss(Enemy):
         self.damage_animation_timer = 0
         self.damage_flash_interval = 5
 
+        self.is_dying = False
+        self.death_animation_timer = 0
+        self.death_animation_duration = 180
+        self.death_explosion_timer = 0
+        self.death_explosion_interval = 10
+        self.death_explosions = []
+
         self.eye_left_center = (32, 35)
         self.eye_left_radius_x = 11
         self.eye_left_radius_y = 9
@@ -268,6 +275,34 @@ class Boss(Enemy):
 
     def update(self, player_position=None, enemy_projectiles=None):
         self.timer += 1
+
+        if self.is_dying:
+            self.death_animation_timer += 1
+
+            progress = self.death_animation_timer / self.death_animation_duration
+            current_flash_interval = max(2, int(10 * (1 - progress * 0.8)))
+
+            frame_in_cycle = (self.death_animation_timer // current_flash_interval) % 2
+            if frame_in_cycle == 0:
+                self.image = self.sprite_damaged_1
+            else:
+                self.image = self.sprite_damaged_2
+
+            self.death_explosion_timer += 1
+            explosion_interval = max(3, int(15 * (1 - progress * 0.7)))
+            if self.death_explosion_timer >= explosion_interval:
+                self.death_explosion_timer = 0
+                rand_x = self.rect.left + random.randint(10, 90)
+                rand_y = self.rect.top + random.randint(10, 90)
+                self.death_explosions.append(Explosion(rand_x, rand_y, duration=400))
+
+            for exp in self.death_explosions:
+                exp.update()
+            self.death_explosions = [exp for exp in self.death_explosions if not exp.is_finished()]
+
+            if self.death_animation_timer >= self.death_animation_duration:
+                return True
+            return False
 
         # animation de dégâts (priorité sur l'animation de tir)
         if self.damage_animation_active:
@@ -408,25 +443,29 @@ class Boss(Enemy):
     def draw(self, surface):
         surface.blit(self.image, self.rect)
 
-        cross_size = 1
+        if not self.is_dying:
+            cross_size = 1
 
-        pupil_left_x = self.rect.left + self.eye_left_center[0] + int(self.pupil_left_offset[0])
-        pupil_left_y = self.rect.top + self.eye_left_center[1] + int(self.pupil_left_offset[1])
-        pygame.draw.line(surface, BLACK,
-                        (pupil_left_x - cross_size, pupil_left_y),
-                        (pupil_left_x + cross_size, pupil_left_y), 1)
-        pygame.draw.line(surface, BLACK,
-                        (pupil_left_x, pupil_left_y - cross_size),
-                        (pupil_left_x, pupil_left_y + cross_size), 1)
+            pupil_left_x = self.rect.left + self.eye_left_center[0] + int(self.pupil_left_offset[0])
+            pupil_left_y = self.rect.top + self.eye_left_center[1] + int(self.pupil_left_offset[1])
+            pygame.draw.line(surface, BLACK,
+                            (pupil_left_x - cross_size, pupil_left_y),
+                            (pupil_left_x + cross_size, pupil_left_y), 1)
+            pygame.draw.line(surface, BLACK,
+                            (pupil_left_x, pupil_left_y - cross_size),
+                            (pupil_left_x, pupil_left_y + cross_size), 1)
 
-        pupil_right_x = self.rect.left + self.eye_right_center[0] + int(self.pupil_right_offset[0])
-        pupil_right_y = self.rect.top + self.eye_right_center[1] + int(self.pupil_right_offset[1])
-        pygame.draw.line(surface, BLACK,
-                        (pupil_right_x - cross_size, pupil_right_y),
-                        (pupil_right_x + cross_size, pupil_right_y), 1)
-        pygame.draw.line(surface, BLACK,
-                        (pupil_right_x, pupil_right_y - cross_size),
-                        (pupil_right_x, pupil_right_y + cross_size), 1)
+            pupil_right_x = self.rect.left + self.eye_right_center[0] + int(self.pupil_right_offset[0])
+            pupil_right_y = self.rect.top + self.eye_right_center[1] + int(self.pupil_right_offset[1])
+            pygame.draw.line(surface, BLACK,
+                            (pupil_right_x - cross_size, pupil_right_y),
+                            (pupil_right_x + cross_size, pupil_right_y), 1)
+            pygame.draw.line(surface, BLACK,
+                            (pupil_right_x, pupil_right_y - cross_size),
+                            (pupil_right_x, pupil_right_y + cross_size), 1)
+
+        for exp in self.death_explosions:
+            exp.draw(surface)
 
 
 class ShootingEnemy(Enemy):
@@ -834,9 +873,16 @@ def main():
             projectile.update()
         projectiles = [p for p in projectiles if p.rect.bottom > 0]
 
-        for enemy in level.enemies:
+        for enemy in level.enemies[:]:
             if isinstance(enemy, Boss):
-                enemy.update(player.rect.center, enemy_projectiles)
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    level.enemies.remove(enemy)
+                    for _ in range(5):
+                        rand_x = enemy.rect.left + random.randint(0, 100)
+                        rand_y = enemy.rect.top + random.randint(0, 100)
+                        explosions.append(Explosion(rand_x, rand_y, duration=500))
+                    print("Boss vaincu !")
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
 
@@ -849,6 +895,8 @@ def main():
         for projectile in projectiles[:]:
             for enemy in level.enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
+                    if isinstance(enemy, Boss) and enemy.is_dying:
+                        continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
@@ -856,9 +904,9 @@ def main():
                     if isinstance(enemy, Boss):
                         enemy.take_damage(1)
                         print(f'Boss touché ! HP restant : {enemy.hp}')
-                        if enemy.hp <= 0:
-                            level.enemies.remove(enemy)
-                            print("Boss vaincu !")
+                        if enemy.hp <= 0 and not enemy.is_dying:
+                            enemy.is_dying = True
+                            print("Boss en train de mourir...")
                     else:
                         if enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
@@ -888,17 +936,22 @@ def main():
 
         for enemy in level.enemies[:]:
             if enemy.rect.colliderect(player.rect):
+                if isinstance(enemy, Boss) and enemy.is_dying:
+                    continue
                 if not player.invulnerable:
                     player.hp -= player.contact_damage
                     print(f'Player touché par ennemi ! HP restant : {player.hp}')
                     if isinstance(enemy, Boss):
                         enemy.take_damage(player.contact_damage)
+                        if enemy.hp <= 0 and not enemy.is_dying:
+                            enemy.is_dying = True
+                            print("Boss en train de mourir...")
                     else:
                         enemy.hp -= player.contact_damage
                     impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
-                    if enemy.hp <= 0:
+                    if enemy.hp <= 0 and not isinstance(enemy, Boss):
                         if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
