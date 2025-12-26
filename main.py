@@ -819,6 +819,10 @@ class Player:
         self.power_duration = 15000
         self.power_start = 0
 
+        # Effet de réacteur (thruster)
+        self.thruster_particles = []
+        self.thruster_timer = 0
+
     def update(self):
         pos = pygame.mouse.get_pos()
         self.rect.center = pos
@@ -832,6 +836,34 @@ class Player:
             if now - self.power_start >= self.power_duration:
                 self.power_type = 'normal'
                 print("Power-up expiré!")
+
+        # Mise à jour de l'effet de réacteur
+        self.thruster_timer += 1
+        if self.thruster_timer % 2 == 0:
+            # Créer de nouvelles particules de feu
+            base_x = self.rect.centerx
+            base_y = self.rect.bottom - 5
+            for _ in range(2):
+                particle = {
+                    'x': base_x + random.uniform(-8, 8),
+                    'y': base_y,
+                    'vx': random.uniform(-0.5, 0.5),
+                    'vy': random.uniform(2, 4),
+                    'life': random.randint(10, 20),
+                    'max_life': 20,
+                    'size': random.uniform(3, 6),
+                }
+                self.thruster_particles.append(particle)
+
+        # Mise à jour des particules existantes
+        for p in self.thruster_particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['life'] -= 1
+            p['size'] = max(0, p['size'] - 0.2)
+
+        # Supprimer les particules mortes
+        self.thruster_particles = [p for p in self.thruster_particles if p['life'] > 0]
 
     def apply_powerup(self, power_type):
         """Applique un power-up au joueur"""
@@ -866,6 +898,29 @@ class Player:
             self.last_shot = now
 
     def draw(self, surface):
+        # Dessiner l'effet de réacteur (avant le vaisseau)
+        for p in self.thruster_particles:
+            progress = p['life'] / p['max_life']
+            size = int(p['size'])
+            if size < 1:
+                continue
+
+            # Couleur qui passe de jaune/blanc (centre) à orange puis rouge
+            if progress > 0.7:
+                # Coeur chaud : jaune-blanc
+                r, g, b = 255, 255, int(200 * progress)
+            elif progress > 0.4:
+                # Orange
+                r, g, b = 255, int(150 + 100 * progress), 0
+            else:
+                # Rouge qui s'estompe
+                r, g, b = int(255 * progress * 2), int(50 * progress), 0
+
+            alpha = int(255 * progress)
+            particle_surf = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(particle_surf, (r, g, b, alpha), (size, size), size)
+            surface.blit(particle_surf, (int(p['x'] - size), int(p['y'] - size)))
+
         if self.invulnerable:
             temp_img = self.image.copy()
             pygame.draw.rect(temp_img, YELLOW, temp_img.get_rect(), 3)
