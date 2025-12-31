@@ -1795,6 +1795,616 @@ class Boss4(Enemy):
             exp.draw(surface)
 
 
+class Boss5Projectile(EnemyProjectile):
+    """Projectiles du Boss 5 - Verts toxiques/acides"""
+    def __init__(self, x, y, dx, dy, speed=7):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((13, 13))
+        self.image.fill((0, 255, 100))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 11
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(6 * progress))
+            color = (0, int(255 * progress), int(100 * progress), alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (0, 255, 100), self.rect.center, 6)
+        pygame.draw.circle(surface, (150, 255, 150), self.rect.center, 3)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 1)
+
+
+class ZigZagProjectile(EnemyProjectile):
+    """Projectile qui zigzague horizontalement"""
+    def __init__(self, x, y, dy, speed=5, amplitude=50, frequency=0.1):
+        super().__init__(x, y, 0, dy, speed)
+        self.start_x = x
+        self.amplitude = amplitude
+        self.frequency = frequency
+        self.timer = 0
+        self.image = pygame.Surface((10, 10))
+        self.image.fill((100, 255, 100))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 10
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(5 * progress))
+            color = (100, int(255 * progress), 100, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self):
+        self.timer += 1
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.y += int(self.dy * self.speed)
+        # Mouvement zigzag
+        self.rect.x = self.start_x + int(math.sin(self.timer * self.frequency) * self.amplitude)
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (100, 255, 100), self.rect.center, 5)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class GravityProjectile(EnemyProjectile):
+    """Projectile affecté par la gravité"""
+    def __init__(self, x, y, dx, dy, speed=8):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((12, 12))
+        self.image.fill((200, 100, 255))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 12
+        self.gravity = 0.15
+        self.vy = dy * speed
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(6 * progress))
+            color = (200, int(100 * progress), 255, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx * self.speed)
+        self.vy += self.gravity
+        self.rect.y += int(self.vy)
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (200, 100, 255), self.rect.center, 6)
+        pygame.draw.circle(surface, (255, 200, 255), self.rect.center, 3)
+
+
+class TeleportingProjectile(EnemyProjectile):
+    """Projectile qui se téléporte périodiquement"""
+    def __init__(self, x, y, dx, dy, speed=4):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((14, 14))
+        self.image.fill((255, 0, 255))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 5
+        self.timer = 0
+        self.teleport_interval = 30
+        self.teleport_distance = 80
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(7 * progress))
+            color = (255, 0, int(255 * progress), alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self):
+        self.timer += 1
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+        # Téléportation
+        if self.timer % self.teleport_interval == 0:
+            self.rect.y += self.teleport_distance
+            self.trail.clear()
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            if i < len(self.trail_cache):
+                trail_surf, size = self.trail_cache[i]
+                surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        # Effet de scintillement
+        if (self.timer // 3) % 2 == 0:
+            pygame.draw.circle(surface, (255, 0, 255), self.rect.center, 7)
+        else:
+            pygame.draw.circle(surface, (255, 100, 255), self.rect.center, 7)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 3)
+
+
+class Boss5(Enemy):
+    """Cinquième Boss - Le Némésis ultime avec des patterns chaotiques"""
+    def __init__(self, x, y, speed=2, target_y=90):
+        super().__init__(x, y, speed)
+
+        self.size = 180
+        self.image = self._create_boss_sprite()
+        self.rect = self.image.get_rect(center=(x, y))
+        self.hp = 60  # Le plus résistant de tous
+        self.max_hp = 60
+        self.target_y = target_y
+        self.in_position = False
+        self.timer = 0
+        self.shoot_delay_frames = 8  # Extrêmement rapide
+        self.last_shot_frame = 0
+        self.current_pattern = 0
+        self.pattern_switch_interval = 150  # Change très souvent
+
+        # Mouvement téléportation
+        self.teleport_cooldown = 240
+        self.last_teleport = -240
+        self.is_teleporting = False
+        self.teleport_timer = 0
+        self.teleport_duration = 30
+        self.teleport_target = (0, 0)
+
+        # Animation de dégâts
+        self.damage_animation_active = False
+        self.damage_animation_duration = 10
+        self.damage_animation_timer = 0
+        self.damage_flash_interval = 2
+
+        # Animation de mort
+        self.is_dying = False
+        self.death_animation_timer = 0
+        self.death_animation_duration = 360
+        self.death_explosion_timer = 0
+        self.death_explosions = []
+
+        # Mode rage (activé quand HP < 30%)
+        self.rage_mode = False
+        self.rage_pulse = 0
+
+        # Clone (illusion)
+        self.clone_active = False
+        self.clone_position = (0, 0)
+        self.clone_timer = 0
+        self.clone_duration = 180
+
+        # Bouclier rotatif
+        self.shield_orbs = []
+        self.shield_active = False
+        self.shield_orb_count = 6
+        self.shield_rotation = 0
+
+        # Pulsation visuelle
+        self.pulse_timer = 0
+        self.eye_glow = 0
+
+    def _create_boss_sprite(self):
+        """Crée un sprite procédural pour le Boss 5 - Entité cosmique/Œil du chaos"""
+        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        center = self.size // 2
+
+        # Tentacules/rayons organiques
+        for i in range(8):
+            angle = math.radians(45 * i + 22.5)
+            for j in range(3):
+                length = 60 + j * 15
+                thickness = 6 - j * 2
+                x1 = center + math.cos(angle) * 35
+                y1 = center + math.sin(angle) * 35
+                x2 = center + math.cos(angle) * length
+                y2 = center + math.sin(angle) * length
+                color_intensity = 150 + j * 35
+                pygame.draw.line(surf, (0, color_intensity, int(color_intensity * 0.5)),
+                               (x1, y1), (x2, y2), thickness)
+
+        # Corps principal - forme organique
+        pygame.draw.circle(surf, (20, 60, 40), (center, center), 50)
+        pygame.draw.circle(surf, (30, 100, 60), (center, center), 45)
+        pygame.draw.circle(surf, (0, 150, 80), (center, center), 50, 3)
+
+        # Motif hexagonal interne
+        hex_points = []
+        for i in range(6):
+            angle = math.radians(60 * i - 30)
+            hx = center + math.cos(angle) * 30
+            hy = center + math.sin(angle) * 30
+            hex_points.append((hx, hy))
+        pygame.draw.polygon(surf, (0, 80, 50), hex_points)
+        pygame.draw.polygon(surf, (0, 200, 100), hex_points, 2)
+
+        # Œil central principal
+        pygame.draw.circle(surf, (0, 0, 0), (center, center), 22)
+        pygame.draw.circle(surf, (0, 255, 100), (center, center), 18)
+        pygame.draw.circle(surf, (200, 255, 200), (center, center), 10)
+        pygame.draw.circle(surf, (0, 100, 50), (center, center), 5)
+
+        # Petits yeux secondaires
+        for i in range(3):
+            angle = math.radians(120 * i - 90)
+            ex = center + math.cos(angle) * 35
+            ey = center + math.sin(angle) * 35
+            pygame.draw.circle(surf, (0, 0, 0), (int(ex), int(ey)), 8)
+            pygame.draw.circle(surf, (0, 255, 100), (int(ex), int(ey)), 6)
+            pygame.draw.circle(surf, WHITE, (int(ex), int(ey)), 3)
+
+        return surf
+
+    def _create_damaged_sprite(self):
+        """Crée un sprite endommagé"""
+        surf = self._create_boss_sprite()
+        flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        flash.fill((255, 255, 255, 180))
+        surf.blit(flash, (0, 0))
+        return surf
+
+    def _create_rage_sprite(self):
+        """Crée un sprite en mode rage"""
+        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        center = self.size // 2
+
+        # Tentacules plus agressifs (rouges)
+        for i in range(8):
+            angle = math.radians(45 * i + 22.5 + self.rage_pulse)
+            for j in range(4):
+                length = 65 + j * 18
+                thickness = 7 - j * 1.5
+                x1 = center + math.cos(angle) * 35
+                y1 = center + math.sin(angle) * 35
+                x2 = center + math.cos(angle) * length
+                y2 = center + math.sin(angle) * length
+                pygame.draw.line(surf, (255, int(50 + j * 30), 0),
+                               (x1, y1), (x2, y2), int(thickness))
+
+        # Corps en rage
+        pygame.draw.circle(surf, (80, 20, 20), (center, center), 50)
+        pygame.draw.circle(surf, (150, 30, 30), (center, center), 45)
+        pygame.draw.circle(surf, (255, 50, 50), (center, center), 50, 3)
+
+        # Hexagone
+        hex_points = []
+        for i in range(6):
+            angle = math.radians(60 * i - 30 + self.rage_pulse * 2)
+            hx = center + math.cos(angle) * 30
+            hy = center + math.sin(angle) * 30
+            hex_points.append((hx, hy))
+        pygame.draw.polygon(surf, (100, 0, 0), hex_points)
+        pygame.draw.polygon(surf, (255, 100, 0), hex_points, 2)
+
+        # Œil central en rage
+        pygame.draw.circle(surf, (0, 0, 0), (center, center), 22)
+        pygame.draw.circle(surf, (255, 50, 0), (center, center), 18)
+        pygame.draw.circle(surf, (255, 200, 100), (center, center), 10)
+        pygame.draw.circle(surf, (150, 0, 0), (center, center), 5)
+
+        # Yeux secondaires
+        for i in range(3):
+            angle = math.radians(120 * i - 90 + self.rage_pulse)
+            ex = center + math.cos(angle) * 35
+            ey = center + math.sin(angle) * 35
+            pygame.draw.circle(surf, (0, 0, 0), (int(ex), int(ey)), 8)
+            pygame.draw.circle(surf, (255, 50, 0), (int(ex), int(ey)), 6)
+            pygame.draw.circle(surf, (255, 200, 0), (int(ex), int(ey)), 3)
+
+        return surf
+
+    def update(self, player_position=None, enemy_projectiles=None):
+        self.timer += 1
+        self.pulse_timer += 1
+        self.eye_glow = abs(math.sin(self.pulse_timer * 0.05)) * 50
+
+        # Vérifier mode rage
+        if self.hp <= self.max_hp * 0.3 and not self.rage_mode:
+            self.rage_mode = True
+            self.shoot_delay_frames = 5  # Encore plus rapide en rage
+            print("Boss 5: MODE RAGE ACTIVÉ!")
+
+        if self.rage_mode:
+            self.rage_pulse += 3
+
+        if self.is_dying:
+            self.death_animation_timer += 1
+            progress = self.death_animation_timer / self.death_animation_duration
+
+            if (self.death_animation_timer // 2) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_rage_sprite() if self.rage_mode else self._create_boss_sprite()
+
+            self.death_explosion_timer += 1
+            explosion_interval = max(1, int(6 * (1 - progress * 0.98)))
+            if self.death_explosion_timer >= explosion_interval:
+                self.death_explosion_timer = 0
+                rand_x = self.rect.left + random.randint(-20, self.size + 20)
+                rand_y = self.rect.top + random.randint(-20, self.size + 20)
+                self.death_explosions.append(Explosion(rand_x, rand_y, duration=700))
+
+            for exp in self.death_explosions:
+                exp.update()
+            self.death_explosions = [exp for exp in self.death_explosions if not exp.is_finished()]
+
+            if self.death_animation_timer >= self.death_animation_duration:
+                return True
+            return False
+
+        # Téléportation
+        if self.is_teleporting:
+            self.teleport_timer += 1
+            if self.teleport_timer >= self.teleport_duration // 2 and self.rect.center != self.teleport_target:
+                self.rect.center = self.teleport_target
+            if self.teleport_timer >= self.teleport_duration:
+                self.is_teleporting = False
+                self.teleport_timer = 0
+            return False
+
+        # Animation de dégâts
+        if self.damage_animation_active:
+            self.damage_animation_timer += 1
+            if (self.damage_animation_timer // self.damage_flash_interval) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_rage_sprite() if self.rage_mode else self._create_boss_sprite()
+
+            if self.damage_animation_timer >= self.damage_animation_duration:
+                self.damage_animation_active = False
+                self.damage_animation_timer = 0
+                self.image = self._create_rage_sprite() if self.rage_mode else self._create_boss_sprite()
+        else:
+            self.image = self._create_rage_sprite() if self.rage_mode else self._create_boss_sprite()
+
+        # Gestion du clone
+        if self.clone_active:
+            self.clone_timer += 1
+            if self.clone_timer >= self.clone_duration:
+                self.clone_active = False
+                self.clone_timer = 0
+
+        # Déplacement vers la position
+        if not self.in_position:
+            if self.rect.centery < self.target_y:
+                self.rect.y += self.speed
+            else:
+                self.in_position = True
+                print("Boss 5 en position de combat!")
+        else:
+            # Mouvement erratique
+            move_x = math.sin(self.timer * 0.03) * 3 + math.cos(self.timer * 0.02) * 2
+            move_y = math.cos(self.timer * 0.025) * 2
+            self.rect.x += int(move_x)
+            self.rect.y = self.target_y + int(math.sin(self.timer * 0.015) * 40)
+
+            # Garder dans les limites
+            self.rect.x = max(100, min(SCREEN_WIDTH - 100, self.rect.x))
+
+            # Téléportation périodique (plus fréquent en rage)
+            tp_cooldown = self.teleport_cooldown // 2 if self.rage_mode else self.teleport_cooldown
+            if self.timer - self.last_teleport >= tp_cooldown and player_position:
+                self.is_teleporting = True
+                self.teleport_timer = 0
+                self.last_teleport = self.timer
+                # Téléporter vers une position aléatoire
+                self.teleport_target = (
+                    random.randint(150, SCREEN_WIDTH - 150),
+                    random.randint(80, 200)
+                )
+                print("Boss 5: Téléportation!")
+
+            # Tir
+            if player_position and enemy_projectiles is not None:
+                if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
+                    self.last_shot_frame = self.timer
+                    num_patterns = 8 if self.rage_mode else 6
+                    pattern_index = (self.timer // self.pattern_switch_interval) % num_patterns
+                    projectiles = self.shoot_pattern(pattern_index, player_position)
+                    enemy_projectiles.extend(projectiles)
+
+    def shoot_pattern(self, pattern_index, player_position):
+        """Retourne une liste de projectiles - patterns chaotiques du Boss 5"""
+        projectiles = []
+        bx = self.rect.centerx
+        by = self.rect.bottom - 30
+
+        if pattern_index == 0:
+            # Pattern 0: Zigzag multiples
+            for i in range(5):
+                offset_x = (i - 2) * 50
+                projectiles.append(ZigZagProjectile(bx + offset_x, by, 1, speed=5,
+                                                   amplitude=40 + i * 10, frequency=0.08 + i * 0.02))
+            print("Boss 5: Zigzag!")
+
+        elif pattern_index == 1:
+            # Pattern 1: Tirs paraboliques (gravité)
+            for angle_deg in [-60, -30, 0, 30, 60]:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad) * 0.3
+                projectiles.append(GravityProjectile(bx, by, dx, dy, speed=6))
+            print("Boss 5: Tirs paraboliques!")
+
+        elif pattern_index == 2:
+            # Pattern 2: Projectiles téléporteurs
+            px, py = player_position
+            dx = px - bx
+            dy = py - by
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:
+                dx /= dist
+                dy /= dist
+            projectiles.append(TeleportingProjectile(bx, by, dx, dy, speed=3))
+            projectiles.append(TeleportingProjectile(bx - 30, by, dx, dy, speed=3))
+            projectiles.append(TeleportingProjectile(bx + 30, by, dx, dy, speed=3))
+            print("Boss 5: Tirs téléporteurs!")
+
+        elif pattern_index == 3:
+            # Pattern 3: Spirale double sens
+            for i in range(6):
+                angle1 = math.radians(self.timer * 4 + i * 60)
+                angle2 = math.radians(-self.timer * 4 + i * 60 + 30)
+                dx1 = math.cos(angle1)
+                dy1 = math.sin(angle1)
+                dx2 = math.cos(angle2)
+                dy2 = math.sin(angle2)
+                projectiles.append(Boss5Projectile(bx, by, dx1, dy1, speed=4))
+                projectiles.append(Boss5Projectile(bx, by, dx2, dy2, speed=4))
+            print("Boss 5: Double spirale!")
+
+        elif pattern_index == 4:
+            # Pattern 4: Mur ondulant
+            for i in range(11):
+                offset_x = (i - 5) * 40
+                wave_offset = math.sin(i * 0.5 + self.timer * 0.1) * 0.3
+                projectiles.append(Boss5Projectile(bx + offset_x, by, wave_offset, 1, speed=6))
+            print("Boss 5: Mur ondulant!")
+
+        elif pattern_index == 5:
+            # Pattern 5: Activer le clone
+            if not self.clone_active:
+                self.clone_active = True
+                self.clone_timer = 0
+                # Position du clone de l'autre côté
+                self.clone_position = (SCREEN_WIDTH - self.rect.centerx, self.rect.centery)
+                print("Boss 5: Clone activé!")
+            # Tir depuis le clone aussi
+            cx, cy = self.clone_position
+            px, py = player_position
+            dx = px - cx
+            dy = py - cy
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:
+                dx /= dist
+                dy /= dist
+            projectiles.append(Boss5Projectile(cx, cy + 60, dx, dy, speed=7))
+
+        # Patterns rage uniquement
+        elif pattern_index == 6 and self.rage_mode:
+            # Pattern 6: Tempête de projectiles
+            for i in range(16):
+                angle = (2 * math.pi / 16) * i + self.timer * 0.1
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                projectiles.append(Boss5Projectile(bx, by, dx, dy, speed=5))
+            print("Boss 5: TEMPÊTE!")
+
+        elif pattern_index == 7 and self.rage_mode:
+            # Pattern 7: Tout en même temps (chaos total)
+            # Quelques zigzags
+            projectiles.append(ZigZagProjectile(bx, by, 1, speed=6, amplitude=60, frequency=0.1))
+            # Quelques gravités
+            projectiles.append(GravityProjectile(bx - 50, by, -0.3, 0.2, speed=5))
+            projectiles.append(GravityProjectile(bx + 50, by, 0.3, 0.2, speed=5))
+            # Spirale
+            for i in range(4):
+                angle = math.radians(self.timer * 5 + i * 90)
+                projectiles.append(Boss5Projectile(bx, by, math.cos(angle), math.sin(angle), speed=4))
+            print("Boss 5: CHAOS TOTAL!")
+
+        return projectiles
+
+    def take_damage(self, amount=1):
+        """Applique des dégâts au boss"""
+        self.hp -= amount
+        self.damage_animation_active = True
+        self.damage_animation_timer = 0
+
+    def draw(self, surface):
+        # Effet de pulsation
+        pulse = abs(math.sin(self.pulse_timer * 0.03)) * 0.4 + 0.6
+
+        if not self.is_dying:
+            # Aura verte (ou rouge en rage)
+            if self.rage_mode:
+                aura_color = (150, 0, 0, 40)
+            else:
+                aura_color = (0, 150, 50, 40)
+            aura_size = int(100 * pulse)
+            aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(aura_surf, aura_color, (aura_size, aura_size), aura_size)
+            surface.blit(aura_surf, (self.rect.centerx - aura_size, self.rect.centery - aura_size))
+
+            # Particules flottantes
+            for i in range(8):
+                angle = math.radians(self.pulse_timer * 1.5 + i * 45)
+                radius = 90 + math.sin(self.pulse_timer * 0.05 + i) * 20
+                px = self.rect.centerx + math.cos(angle) * radius
+                py = self.rect.centery + math.sin(angle) * radius * 0.6
+                color = (255, 100, 0) if self.rage_mode else (0, 255, 100)
+                pygame.draw.circle(surface, color, (int(px), int(py)), 5)
+                pygame.draw.circle(surface, WHITE, (int(px), int(py)), 2)
+
+        # Effet de téléportation
+        if self.is_teleporting:
+            alpha = int(255 * (1 - self.teleport_timer / self.teleport_duration))
+            tp_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            tp_surf.blit(self.image, (0, 0))
+            tp_surf.set_alpha(alpha)
+            surface.blit(tp_surf, self.rect)
+            # Effet au point d'arrivée
+            if self.teleport_timer >= self.teleport_duration // 2:
+                target_alpha = int(255 * (self.teleport_timer - self.teleport_duration // 2) / (self.teleport_duration // 2))
+                arrival_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+                arrival_surf.blit(self.image, (0, 0))
+                arrival_surf.set_alpha(target_alpha)
+                arrival_rect = arrival_surf.get_rect(center=self.teleport_target)
+                surface.blit(arrival_surf, arrival_rect)
+            return
+
+        # Dessiner le clone
+        if self.clone_active:
+            clone_alpha = int(150 + 50 * math.sin(self.clone_timer * 0.1))
+            clone_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            clone_surf.blit(self.image, (0, 0))
+            clone_surf.set_alpha(clone_alpha)
+            clone_rect = clone_surf.get_rect(center=self.clone_position)
+            surface.blit(clone_surf, clone_rect)
+
+        surface.blit(self.image, self.rect)
+
+        # Barre de rage
+        if self.rage_mode:
+            rage_text_surf = pygame.Surface((100, 20), pygame.SRCALPHA)
+            rage_alpha = int(150 + 100 * abs(math.sin(self.timer * 0.1)))
+            pygame.draw.rect(rage_text_surf, (255, 0, 0, rage_alpha), (0, 0, 100, 20))
+            surface.blit(rage_text_surf, (self.rect.centerx - 50, self.rect.top - 30))
+
+        for exp in self.death_explosions:
+            exp.draw(surface)
+
+
 class Level:
     def __init__(self):
         self.background = Background(speed=2)
@@ -1830,6 +2440,12 @@ class Level:
         self.boss3_defeat_timer = 0
         self.boss4_spawn_delay = 600  # 10 secondes à 60 FPS
         self.boss4_spawned = False
+
+        # Système de spawn du Boss 5
+        self.boss4_defeated = False
+        self.boss4_defeat_timer = 0
+        self.boss5_spawn_delay = 600  # 10 secondes à 60 FPS
+        self.boss5_spawned = False
 
     def spawn_enemies(self, count):
         for _ in range(count):
@@ -1867,6 +2483,12 @@ class Level:
         self.enemies.append(boss4)
         self.boss4_spawned = True
         print(f'Spawned Boss 4 at timer {self.timer}')
+
+    def spawn_boss5(self):
+        boss5 = Boss5(SCREEN_WIDTH // 2, -100)
+        self.enemies.append(boss5)
+        self.boss5_spawned = True
+        print(f'Spawned Boss 5 at timer {self.timer}')
 
     def spawn_formation_v(self, count):
         """Spawn des ennemis en formation V"""
@@ -1955,9 +2577,9 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3, Boss4)):
+            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5)):
                 enemy.update()
-        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4)))]
+        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5)))]
 
         # Gestion du spawn du Boss 2 après défaite du Boss 1
         if self.boss1_defeated and not self.boss2_spawned:
@@ -1977,7 +2599,13 @@ class Level:
             if self.boss3_defeat_timer >= self.boss4_spawn_delay:
                 self.spawn_boss4()
 
-        if any(isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) for enemy in self.enemies):
+        # Gestion du spawn du Boss 5 après défaite du Boss 4
+        if self.boss4_defeated and not self.boss5_spawned:
+            self.boss4_defeat_timer += 1
+            if self.boss4_defeat_timer >= self.boss5_spawn_delay:
+                self.spawn_boss5()
+
+        if any(isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)) for enemy in self.enemies):
             if self.background.speed > 0:
                 self.background.speed = max(self.background.speed - 0.05, 0)
         else:
@@ -2257,7 +2885,17 @@ def main():
                         rand_x = enemy.rect.left + random.randint(0, 160)
                         rand_y = enemy.rect.top + random.randint(0, 160)
                         explosions.append(Explosion(rand_x, rand_y, duration=800))
-                    print("Boss 4 vaincu ! VICTOIRE ULTIME !")
+                    print("Boss 4 vaincu !")
+                    level.boss4_defeated = True
+            elif isinstance(enemy, Boss5):
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    level.enemies.remove(enemy)
+                    for _ in range(30):
+                        rand_x = enemy.rect.left + random.randint(0, 180)
+                        rand_y = enemy.rect.top + random.randint(0, 180)
+                        explosions.append(Explosion(rand_x, rand_y, duration=1000))
+                    print("Boss 5 vaincu ! VICTOIRE ULTIME !")
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
 
@@ -2286,14 +2924,14 @@ def main():
         for projectile in projectiles[:]:
             for enemy in level.enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)) and enemy.is_dying:
                         continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
                     combo.hit()  # Prolonge le combo
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)):
                         enemy.take_damage(1)
                         if isinstance(enemy, Boss):
                             boss_name = "Boss 1"
@@ -2301,8 +2939,10 @@ def main():
                             boss_name = "Boss 2"
                         elif isinstance(enemy, Boss3):
                             boss_name = "Boss 3"
-                        else:
+                        elif isinstance(enemy, Boss4):
                             boss_name = "Boss 4"
+                        else:
+                            boss_name = "Boss 5"
                         print(f'{boss_name} touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -2336,7 +2976,7 @@ def main():
 
         for enemy in level.enemies[:]:
             if enemy.rect.colliderect(player.rect):
-                if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) and enemy.is_dying:
+                if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)) and enemy.is_dying:
                     continue
                 # Collision avec Boss4 en charge = dégâts massifs
                 if isinstance(enemy, Boss4) and enemy.charging:
@@ -2353,7 +2993,7 @@ def main():
                 if not player.invulnerable:
                     player.hp -= player.contact_damage
                     print(f'Player touché par ennemi ! HP restant : {player.hp}')
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)):
                         enemy.take_damage(player.contact_damage)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -2363,15 +3003,17 @@ def main():
                                 boss_name = "Boss 2"
                             elif isinstance(enemy, Boss3):
                                 boss_name = "Boss 3"
-                            else:
+                            elif isinstance(enemy, Boss4):
                                 boss_name = "Boss 4"
+                            else:
+                                boss_name = "Boss 5"
                             print(f"{boss_name} en train de mourir...")
                     else:
                         enemy.hp -= player.contact_damage
                     impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
-                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
+                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)):
                         if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
