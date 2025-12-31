@@ -1308,6 +1308,493 @@ class Boss3(Enemy):
             exp.draw(surface)
 
 
+class Boss4Projectile(EnemyProjectile):
+    """Projectiles du Boss 4 - Dorés/solaires"""
+    def __init__(self, x, y, dx, dy, speed=7):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((14, 14))
+        self.image.fill((255, 215, 0))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 10
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(7 * progress))
+            color = (255, int(180 * progress), 0, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (255, 215, 0), self.rect.center, 7)
+        pygame.draw.circle(surface, (255, 255, 100), self.rect.center, 4)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class BouncingProjectile(EnemyProjectile):
+    """Projectile qui rebondit sur les bords de l'écran"""
+    def __init__(self, x, y, dx, dy, speed=5, bounces=3):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((12, 12))
+        self.image.fill((255, 100, 0))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 8
+        self.bounces_left = bounces
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(6 * progress))
+            color = (255, int(100 * progress), 0, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+        # Rebond sur les bords
+        if self.bounces_left > 0:
+            if self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH:
+                self.dx = -self.dx
+                self.bounces_left -= 1
+            if self.rect.top <= 0:
+                self.dy = -self.dy
+                self.bounces_left -= 1
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (255, 100, 0), self.rect.center, 6)
+        pygame.draw.circle(surface, (255, 200, 100), self.rect.center, 3)
+
+
+class SplittingProjectile(EnemyProjectile):
+    """Projectile qui se divise après un certain temps"""
+    def __init__(self, x, y, dx, dy, speed=4, split_time=40, can_split=True):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((16, 16))
+        self.image.fill((200, 150, 255))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 6
+        self.timer = 0
+        self.split_time = split_time
+        self.can_split = can_split
+        self.has_split = False
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(8 * progress)) if can_split else max(1, int(4 * progress))
+            color = (200, int(150 * progress), 255, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self):
+        self.timer += 1
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def should_split(self):
+        return self.can_split and self.timer >= self.split_time and not self.has_split
+
+    def split(self):
+        """Retourne une liste de nouveaux projectiles"""
+        self.has_split = True
+        new_projectiles = []
+        for angle_offset in [-45, 0, 45]:
+            angle = math.atan2(self.dy, self.dx) + math.radians(angle_offset)
+            ndx = math.cos(angle)
+            ndy = math.sin(angle)
+            new_projectiles.append(SplittingProjectile(
+                self.rect.centerx, self.rect.centery,
+                ndx, ndy, speed=5, can_split=False
+            ))
+        return new_projectiles
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            if i < len(self.trail_cache):
+                trail_surf, size = self.trail_cache[i]
+                surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        size = 8 if self.can_split else 5
+        pygame.draw.circle(surface, (200, 150, 255), self.rect.center, size)
+        pygame.draw.circle(surface, WHITE, self.rect.center, size // 2)
+
+
+class Boss4(Enemy):
+    """Quatrième Boss - Boss final ultime avec des patterns complexes"""
+    def __init__(self, x, y, speed=2, target_y=80):
+        super().__init__(x, y, speed)
+
+        self.size = 160
+        self.image = self._create_boss_sprite()
+        self.rect = self.image.get_rect(center=(x, y))
+        self.hp = 50  # Le plus résistant
+        self.target_y = target_y
+        self.in_position = False
+        self.timer = 0
+        self.shoot_delay_frames = 10  # Très rapide
+        self.last_shot_frame = 0
+        self.current_pattern = 0
+        self.pattern_switch_interval = 180  # Change très souvent
+        self.lateral_movement_speed = 2.5
+        self.lateral_direction = 1
+
+        # Mouvement en 8
+        self.movement_angle = 0
+        self.movement_radius_x = 150
+        self.movement_radius_y = 40
+
+        # Animation de dégâts
+        self.damage_animation_active = False
+        self.damage_animation_duration = 12
+        self.damage_animation_timer = 0
+        self.damage_flash_interval = 2
+
+        # Animation de mort
+        self.is_dying = False
+        self.death_animation_timer = 0
+        self.death_animation_duration = 300
+        self.death_explosion_timer = 0
+        self.death_explosions = []
+
+        # Variables pour les patterns spéciaux
+        self.vortex_angle = 0
+        self.shield_active = False
+        self.shield_timer = 0
+        self.shield_duration = 180
+        self.shield_cooldown = 600
+        self.last_shield_time = -600
+
+        # Charge attack
+        self.charging = False
+        self.charge_timer = 0
+        self.charge_duration = 120
+        self.charge_warning_duration = 60
+        self.original_y = 0
+
+        # Pulsation visuelle
+        self.pulse_timer = 0
+        self.ring_rotation = 0
+        self.inner_rotation = 0
+
+    def _create_boss_sprite(self):
+        """Crée un sprite procédural pour le Boss 4 - Soleil/Étoile divine"""
+        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        center = self.size // 2
+
+        # Rayons externes
+        for i in range(12):
+            angle = math.radians(30 * i)
+            inner_radius = 40
+            outer_radius = 70
+            x1 = center + math.cos(angle) * inner_radius
+            y1 = center + math.sin(angle) * inner_radius
+            x2 = center + math.cos(angle) * outer_radius
+            y2 = center + math.sin(angle) * outer_radius
+            pygame.draw.line(surf, (255, 200, 0), (x1, y1), (x2, y2), 4)
+
+        # Corps principal - cercle doré
+        pygame.draw.circle(surf, (180, 120, 0), (center, center), 45)
+        pygame.draw.circle(surf, (255, 200, 50), (center, center), 40)
+        pygame.draw.circle(surf, (255, 215, 0), (center, center), 45, 3)
+
+        # Motif interne - triangle
+        triangle_size = 25
+        triangle_points = []
+        for i in range(3):
+            angle = math.radians(120 * i - 90)
+            tx = center + math.cos(angle) * triangle_size
+            ty = center + math.sin(angle) * triangle_size
+            triangle_points.append((tx, ty))
+        pygame.draw.polygon(surf, (200, 100, 0), triangle_points)
+        pygame.draw.polygon(surf, (255, 150, 0), triangle_points, 2)
+
+        # Œil central
+        pygame.draw.circle(surf, (255, 50, 0), (center, center), 15)
+        pygame.draw.circle(surf, (255, 255, 0), (center, center), 10)
+        pygame.draw.circle(surf, WHITE, (center, center), 5)
+
+        return surf
+
+    def _create_damaged_sprite(self):
+        """Crée un sprite endommagé"""
+        surf = self._create_boss_sprite()
+        flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        flash.fill((255, 255, 255, 150))
+        surf.blit(flash, (0, 0))
+        return surf
+
+    def _create_shield_sprite(self):
+        """Crée un sprite avec bouclier"""
+        surf = self._create_boss_sprite()
+        # Ajouter un anneau de bouclier
+        shield_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        pygame.draw.circle(shield_surf, (255, 215, 0, 100), (self.size//2, self.size//2), 75)
+        pygame.draw.circle(shield_surf, (255, 255, 200, 200), (self.size//2, self.size//2), 75, 3)
+        surf.blit(shield_surf, (0, 0))
+        return surf
+
+    def update(self, player_position=None, enemy_projectiles=None):
+        self.timer += 1
+        self.pulse_timer += 1
+        self.ring_rotation += 1
+        self.inner_rotation -= 0.5
+
+        if self.is_dying:
+            self.death_animation_timer += 1
+            progress = self.death_animation_timer / self.death_animation_duration
+
+            if (self.death_animation_timer // 2) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_boss_sprite()
+
+            self.death_explosion_timer += 1
+            explosion_interval = max(1, int(8 * (1 - progress * 0.95)))
+            if self.death_explosion_timer >= explosion_interval:
+                self.death_explosion_timer = 0
+                rand_x = self.rect.left + random.randint(0, self.size)
+                rand_y = self.rect.top + random.randint(0, self.size)
+                self.death_explosions.append(Explosion(rand_x, rand_y, duration=600))
+
+            for exp in self.death_explosions:
+                exp.update()
+            self.death_explosions = [exp for exp in self.death_explosions if not exp.is_finished()]
+
+            if self.death_animation_timer >= self.death_animation_duration:
+                return True
+            return False
+
+        # Gestion du bouclier
+        if self.shield_active:
+            self.shield_timer += 1
+            self.image = self._create_shield_sprite()
+            if self.shield_timer >= self.shield_duration:
+                self.shield_active = False
+                self.shield_timer = 0
+                self.last_shield_time = self.timer
+                self.image = self._create_boss_sprite()
+        elif self.damage_animation_active:
+            self.damage_animation_timer += 1
+            if (self.damage_animation_timer // self.damage_flash_interval) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_boss_sprite()
+
+            if self.damage_animation_timer >= self.damage_animation_duration:
+                self.damage_animation_active = False
+                self.damage_animation_timer = 0
+                self.image = self._create_boss_sprite()
+
+        # Gestion de la charge
+        if self.charging:
+            self.charge_timer += 1
+            if self.charge_timer <= self.charge_warning_duration:
+                # Phase d'avertissement - tremblement
+                shake = random.randint(-3, 3)
+                self.rect.x += shake
+            elif self.charge_timer <= self.charge_warning_duration + 30:
+                # Charge vers le bas
+                self.rect.y += 15
+            elif self.charge_timer <= self.charge_duration:
+                # Retour en position
+                if self.rect.centery > self.original_y:
+                    self.rect.y -= 5
+                else:
+                    self.charging = False
+                    self.charge_timer = 0
+            return False
+
+        # Déplacement vers la position
+        if not self.in_position:
+            if self.rect.centery < self.target_y:
+                self.rect.y += self.speed
+            else:
+                self.in_position = True
+                self.original_y = self.rect.centery
+                print("Boss 4 en position de combat!")
+        else:
+            # Mouvement en forme de 8
+            self.movement_angle += 0.02
+            offset_x = math.sin(self.movement_angle) * self.movement_radius_x
+            offset_y = math.sin(self.movement_angle * 2) * self.movement_radius_y
+            self.rect.centerx = SCREEN_WIDTH // 2 + int(offset_x)
+            self.rect.centery = self.target_y + int(offset_y)
+
+            # Activer le bouclier périodiquement
+            if self.hp < 25 and not self.shield_active and self.timer - self.last_shield_time >= self.shield_cooldown:
+                self.shield_active = True
+                self.shield_timer = 0
+                print("Boss 4: Bouclier activé!")
+
+            # Tir
+            if player_position and enemy_projectiles is not None:
+                if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
+                    self.last_shot_frame = self.timer
+                    pattern_index = (self.timer // self.pattern_switch_interval) % 7
+                    projectiles = self.shoot_pattern(pattern_index, player_position)
+                    enemy_projectiles.extend(projectiles)
+
+    def shoot_pattern(self, pattern_index, player_position):
+        """Retourne une liste de projectiles - patterns ultimes du Boss 4"""
+        projectiles = []
+        bx = self.rect.centerx
+        by = self.rect.bottom - 20
+
+        if pattern_index == 0:
+            # Pattern 0: Vortex - spirale qui s'élargit
+            self.vortex_angle += 25
+            for i in range(4):
+                angle = math.radians(self.vortex_angle + i * 90)
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                projectiles.append(Boss4Projectile(bx, by, dx, dy, speed=4))
+            print("Boss 4: Vortex!")
+
+        elif pattern_index == 1:
+            # Pattern 1: Projectiles rebondissants
+            for angle_deg in [-30, 0, 30]:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)
+                projectiles.append(BouncingProjectile(bx, by, dx, dy, speed=6, bounces=2))
+            print("Boss 4: Tirs rebondissants!")
+
+        elif pattern_index == 2:
+            # Pattern 2: Projectiles qui se divisent
+            px, py = player_position
+            dx = px - bx
+            dy = py - by
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:
+                dx /= dist
+                dy /= dist
+            projectiles.append(SplittingProjectile(bx, by, dx, dy, speed=4, split_time=50))
+            print("Boss 4: Tir diviseur!")
+
+        elif pattern_index == 3:
+            # Pattern 3: Pluie solaire - cascade de projectiles
+            for i in range(9):
+                offset_x = (i - 4) * 45
+                delay_factor = abs(i - 4) * 0.1
+                dy = 1
+                dx = delay_factor * (1 if i > 4 else -1)
+                projectiles.append(Boss4Projectile(bx + offset_x, by, dx, dy, speed=7))
+            print("Boss 4: Pluie solaire!")
+
+        elif pattern_index == 4:
+            # Pattern 4: Double anneau
+            num_projectiles = 10
+            for ring in range(2):
+                offset = ring * 18
+                for i in range(num_projectiles):
+                    angle = (2 * math.pi / num_projectiles) * i + math.radians(offset)
+                    dx = math.cos(angle)
+                    dy = math.sin(angle)
+                    speed = 4 if ring == 0 else 6
+                    projectiles.append(Boss4Projectile(bx, by, dx, dy, speed=speed))
+            print("Boss 4: Double anneau!")
+
+        elif pattern_index == 5:
+            # Pattern 5: Étoile filante - tirs en étoile
+            for i in range(5):
+                angle = math.radians(72 * i - 90 + self.timer % 72)
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                projectiles.append(Boss4Projectile(bx, by, dx, dy, speed=8))
+                # Tir secondaire décalé
+                angle2 = angle + math.radians(36)
+                dx2 = math.cos(angle2)
+                dy2 = math.sin(angle2)
+                projectiles.append(Boss4Projectile(bx, by, dx2, dy2, speed=5))
+            print("Boss 4: Étoile filante!")
+
+        elif pattern_index == 6:
+            # Pattern 6: Charge - le boss fonce vers le joueur
+            if not self.charging and self.timer % 300 < 10:
+                self.charging = True
+                self.charge_timer = 0
+                self.original_y = self.rect.centery
+                print("Boss 4: CHARGE!")
+
+        return projectiles
+
+    def take_damage(self, amount=1):
+        """Applique des dégâts au boss (bloqué si bouclier actif)"""
+        if self.shield_active:
+            print("Boss 4: Bouclier absorbe les dégâts!")
+            return
+        self.hp -= amount
+        self.damage_animation_active = True
+        self.damage_animation_timer = 0
+
+    def draw(self, surface):
+        # Effet de pulsation
+        pulse = abs(math.sin(self.pulse_timer * 0.04)) * 0.3 + 0.7
+
+        if not self.is_dying:
+            # Aura dorée
+            aura_size = int(90 * pulse)
+            aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(aura_surf, (255, 200, 0, 30), (aura_size, aura_size), aura_size)
+            surface.blit(aura_surf, (self.rect.centerx - aura_size, self.rect.centery - aura_size))
+
+            # Anneaux en rotation
+            for i in range(3):
+                ring_radius = 85 + i * 15
+                ring_alpha = 100 - i * 30
+                ring_surf = pygame.Surface((ring_radius * 2 + 10, ring_radius * 2 + 10), pygame.SRCALPHA)
+                pygame.draw.circle(ring_surf, (255, 215, 0, ring_alpha),
+                                 (ring_radius + 5, ring_radius + 5), ring_radius, 2)
+                # Rotation
+                rotated = pygame.transform.rotate(ring_surf, self.ring_rotation * (i + 1) * 0.5)
+                rot_rect = rotated.get_rect(center=(self.rect.centerx, self.rect.centery))
+                surface.blit(rotated, rot_rect)
+
+            # Particules orbitantes
+            for i in range(6):
+                angle = math.radians(self.ring_rotation * 2 + i * 60)
+                orb_x = self.rect.centerx + math.cos(angle) * 80
+                orb_y = self.rect.centery + math.sin(angle) * 50
+                pygame.draw.circle(surface, (255, 200, 0), (int(orb_x), int(orb_y)), 6)
+                pygame.draw.circle(surface, WHITE, (int(orb_x), int(orb_y)), 3)
+
+        # Avertissement de charge
+        if self.charging and self.charge_timer <= self.charge_warning_duration:
+            warning_alpha = int(200 * abs(math.sin(self.charge_timer * 0.4)))
+            warning_surf = pygame.Surface((SCREEN_WIDTH, 100), pygame.SRCALPHA)
+            warning_surf.fill((255, 100, 0, warning_alpha))
+            surface.blit(warning_surf, (0, self.rect.bottom))
+
+        surface.blit(self.image, self.rect)
+
+        for exp in self.death_explosions:
+            exp.draw(surface)
+
+
 class Level:
     def __init__(self):
         self.background = Background(speed=2)
@@ -1337,6 +1824,12 @@ class Level:
         self.boss2_defeat_timer = 0
         self.boss3_spawn_delay = 600  # 10 secondes à 60 FPS
         self.boss3_spawned = False
+
+        # Système de spawn du Boss 4
+        self.boss3_defeated = False
+        self.boss3_defeat_timer = 0
+        self.boss4_spawn_delay = 600  # 10 secondes à 60 FPS
+        self.boss4_spawned = False
 
     def spawn_enemies(self, count):
         for _ in range(count):
@@ -1368,6 +1861,12 @@ class Level:
         self.enemies.append(boss3)
         self.boss3_spawned = True
         print(f'Spawned Boss 3 at timer {self.timer}')
+
+    def spawn_boss4(self):
+        boss4 = Boss4(SCREEN_WIDTH // 2, -90)
+        self.enemies.append(boss4)
+        self.boss4_spawned = True
+        print(f'Spawned Boss 4 at timer {self.timer}')
 
     def spawn_formation_v(self, count):
         """Spawn des ennemis en formation V"""
@@ -1456,9 +1955,9 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3)):
+            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3, Boss4)):
                 enemy.update()
-        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3)))]
+        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4)))]
 
         # Gestion du spawn du Boss 2 après défaite du Boss 1
         if self.boss1_defeated and not self.boss2_spawned:
@@ -1472,7 +1971,13 @@ class Level:
             if self.boss2_defeat_timer >= self.boss3_spawn_delay:
                 self.spawn_boss3()
 
-        if any(isinstance(enemy, (Boss, Boss2, Boss3)) for enemy in self.enemies):
+        # Gestion du spawn du Boss 4 après défaite du Boss 3
+        if self.boss3_defeated and not self.boss4_spawned:
+            self.boss3_defeat_timer += 1
+            if self.boss3_defeat_timer >= self.boss4_spawn_delay:
+                self.spawn_boss4()
+
+        if any(isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) for enemy in self.enemies):
             if self.background.speed > 0:
                 self.background.speed = max(self.background.speed - 0.05, 0)
         else:
@@ -1742,7 +2247,17 @@ def main():
                         rand_x = enemy.rect.left + random.randint(0, 140)
                         rand_y = enemy.rect.top + random.randint(0, 140)
                         explosions.append(Explosion(rand_x, rand_y, duration=700))
-                    print("Boss 3 vaincu ! VICTOIRE TOTALE !")
+                    print("Boss 3 vaincu !")
+                    level.boss3_defeated = True
+            elif isinstance(enemy, Boss4):
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    level.enemies.remove(enemy)
+                    for _ in range(20):
+                        rand_x = enemy.rect.left + random.randint(0, 160)
+                        rand_y = enemy.rect.top + random.randint(0, 160)
+                        explosions.append(Explosion(rand_x, rand_y, duration=800))
+                    print("Boss 4 vaincu ! VICTOIRE ULTIME !")
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
 
@@ -1751,6 +2266,14 @@ def main():
                 e_proj.update(player.rect.center)
             else:
                 e_proj.update()
+
+        # Gérer les projectiles qui se divisent
+        new_split_projectiles = []
+        for e_proj in enemy_projectiles:
+            if isinstance(e_proj, SplittingProjectile) and e_proj.should_split():
+                new_split_projectiles.extend(e_proj.split())
+        enemy_projectiles.extend(new_split_projectiles)
+
         # Filtrer les projectiles hors écran et les missiles expirés
         enemy_projectiles = [p for p in enemy_projectiles if (
             p.rect.top < SCREEN_HEIGHT and
@@ -1763,21 +2286,23 @@ def main():
         for projectile in projectiles[:]:
             for enemy in level.enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2, Boss3)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) and enemy.is_dying:
                         continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
                     combo.hit()  # Prolonge le combo
-                    if isinstance(enemy, (Boss, Boss2, Boss3)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
                         enemy.take_damage(1)
                         if isinstance(enemy, Boss):
                             boss_name = "Boss 1"
                         elif isinstance(enemy, Boss2):
                             boss_name = "Boss 2"
-                        else:
+                        elif isinstance(enemy, Boss3):
                             boss_name = "Boss 3"
+                        else:
+                            boss_name = "Boss 4"
                         print(f'{boss_name} touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -1811,12 +2336,24 @@ def main():
 
         for enemy in level.enemies[:]:
             if enemy.rect.colliderect(player.rect):
-                if isinstance(enemy, (Boss, Boss2, Boss3)) and enemy.is_dying:
+                if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)) and enemy.is_dying:
+                    continue
+                # Collision avec Boss4 en charge = dégâts massifs
+                if isinstance(enemy, Boss4) and enemy.charging:
+                    if not player.invulnerable:
+                        player.hp -= 3
+                        print(f'Player écrasé par la charge ! HP restant : {player.hp}')
+                        if player.hp <= 0:
+                            print("Player éliminé ! Game Over.")
+                            running = False
+                        else:
+                            player.invulnerable = True
+                            player.invuln_start = pygame.time.get_ticks()
                     continue
                 if not player.invulnerable:
                     player.hp -= player.contact_damage
                     print(f'Player touché par ennemi ! HP restant : {player.hp}')
-                    if isinstance(enemy, (Boss, Boss2, Boss3)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
                         enemy.take_damage(player.contact_damage)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -1824,15 +2361,17 @@ def main():
                                 boss_name = "Boss 1"
                             elif isinstance(enemy, Boss2):
                                 boss_name = "Boss 2"
-                            else:
+                            elif isinstance(enemy, Boss3):
                                 boss_name = "Boss 3"
+                            else:
+                                boss_name = "Boss 4"
                             print(f"{boss_name} en train de mourir...")
                     else:
                         enemy.hp -= player.contact_damage
                     impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
-                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3)):
+                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3, Boss4)):
                         if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
