@@ -9,12 +9,88 @@ import math
 from main import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW,
     Player, Projectile, SpreadProjectile, Explosion, PowerUp,
-    Enemy, ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5,
-    EnemyProjectile, BossProjectile, Boss2Projectile, Boss3Projectile, Boss4Projectile, Boss5Projectile,
+    Enemy, ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5, Boss6,
+    EnemyProjectile, BossProjectile, Boss2Projectile, Boss3Projectile, Boss4Projectile, Boss5Projectile, Boss6Projectile,
     HomingProjectile, SplittingProjectile, BouncingProjectile,
     ZigZagProjectile, GravityProjectile, TeleportingProjectile,
+    VortexProjectile, BlackHoleProjectile, MirrorProjectile, PulseWaveProjectile,
     Background, ComboSystem
 )
+
+
+def get_pattern_name(enemy):
+    """Retourne le nom du pattern actuel du boss"""
+    if isinstance(enemy, Boss):
+        patterns = {
+            0: "Tir ciblé",
+            1: "Spirale",
+            2: "Mur de projectiles",
+            3: "Tir en éventail",
+            4: "Pluie aléatoire"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss2):
+        patterns = {
+            0: "Spirale",
+            1: "Pluie verticale",
+            2: "Double vague",
+            3: "Croix rotative",
+            4: "Rafale ciblée"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss3):
+        patterns = {
+            0: "Missiles à tête chercheuse",
+            1: "Mur avec trou",
+            2: "Laser",
+            3: "Vagues convergentes",
+            4: "Pluie en diagonale",
+            5: "Spirale double"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss4):
+        patterns = {
+            0: "Projectiles rebondissants",
+            1: "Projectiles qui se divisent",
+            2: "Charge",
+            3: "Bouclier + tir radial",
+            4: "Tempête solaire",
+            5: "Rayons de soleil",
+            6: "Nova"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss5):
+        patterns = {
+            0: "Projectiles zigzag",
+            1: "Projectiles à gravité",
+            2: "Projectiles téléporteurs",
+            3: "Double spirale",
+            4: "Mur ondulant",
+            5: "Clone illusion",
+            6: "Tempête (Rage)",
+            7: "Chaos total (Rage)"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss6):
+        patterns = {
+            0: "Vortex orbital",
+            1: "Ondes de choc",
+            2: "Miroirs diviseurs",
+            3: "Spirale inversée",
+            4: "Trou noir",
+            5: "Mur de distorsion",
+            6: "Étoiles filantes",
+            7: "Double vortex (Fureur)",
+            8: "Apocalypse (Fureur)"
+        }
+        return patterns.get(enemy.pattern, "Inconnu")
+
+    return ""
 
 
 def show_menu(screen, font):
@@ -25,9 +101,10 @@ def show_menu(screen, font):
         "3 - Boss 3 (Diamant cyan)",
         "4 - Boss 4 (Soleil doré)",
         "5 - Boss 5 (Oeil du chaos)",
-        "6 - Ennemi basique",
-        "7 - Ennemi tireur",
-        "8 - Tous les ennemis",
+        "6 - Boss 6 (Vortex du néant)",
+        "7 - Ennemi basique",
+        "8 - Ennemi tireur",
+        "9 - Tous les ennemis",
         "",
         "ESC - Quitter"
     ]
@@ -51,6 +128,8 @@ def show_menu(screen, font):
             color = (255, 215, 0)
         elif "Boss 5" in option:
             color = (0, 255, 100)
+        elif "Boss 6" in option:
+            color = (150, 0, 200)
 
         text = font.render(option, True, color)
         screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 250 + i * 50))
@@ -88,6 +167,9 @@ def run_test(entity_type):
         enemies.append(enemy)
     elif entity_type == "Boss 5":
         enemy = Boss5(SCREEN_WIDTH // 2, -100)
+        enemies.append(enemy)
+    elif entity_type == "Boss 6":
+        enemy = Boss6(SCREEN_WIDTH // 2, -110)
         enemies.append(enemy)
     elif entity_type == "Ennemi basique":
         for i in range(5):
@@ -129,6 +211,8 @@ def run_test(entity_type):
                         enemies.append(Boss4(SCREEN_WIDTH // 2, -90))
                     elif entity_type == "Boss 5":
                         enemies.append(Boss5(SCREEN_WIDTH // 2, -100))
+                    elif entity_type == "Boss 6":
+                        enemies.append(Boss6(SCREEN_WIDTH // 2, -110))
                     elif entity_type == "Ennemi basique":
                         for i in range(5):
                             enemies.append(Enemy(100 + i * 150, -20 - i * 30))
@@ -212,13 +296,23 @@ def run_test(entity_type):
                             enemy.rect.top + random.randint(0, 180),
                             duration=1000
                         ))
+            elif isinstance(enemy, Boss6):
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    enemies.remove(enemy)
+                    for _ in range(40):
+                        explosions.append(Explosion(
+                            enemy.rect.left + random.randint(0, 200),
+                            enemy.rect.top + random.randint(0, 200),
+                            duration=1200
+                        ))
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
             else:
                 enemy.update()
 
         # Supprimer les ennemis hors écran (sauf boss)
-        enemies = [e for e in enemies if e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5))]
+        enemies = [e for e in enemies if e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6))]
 
         # Update projectiles ennemis
         for e_proj in enemy_projectiles:
@@ -232,6 +326,8 @@ def run_test(entity_type):
         for e_proj in enemy_projectiles:
             if isinstance(e_proj, SplittingProjectile) and e_proj.should_split():
                 new_split.extend(e_proj.split())
+            elif isinstance(e_proj, MirrorProjectile) and e_proj.should_split():
+                new_split.extend(e_proj.split())
         enemy_projectiles.extend(new_split)
 
         # Filtrer projectiles
@@ -240,21 +336,23 @@ def run_test(entity_type):
             p.rect.left < SCREEN_WIDTH and
             p.rect.right > 0 and
             p.rect.bottom > 0 and
-            not (isinstance(p, HomingProjectile) and p.is_expired())
+            not (isinstance(p, HomingProjectile) and p.is_expired()) and
+            not (isinstance(p, BlackHoleProjectile) and p.is_expired()) and
+            not (isinstance(p, PulseWaveProjectile) and p.is_expired())
         )]
 
         # Collisions projectiles joueur -> ennemis
         for projectile in projectiles[:]:
             for enemy in enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)) and enemy.is_dying:
                         continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
                     combo.hit()
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
                         enemy.take_damage(1)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -332,11 +430,27 @@ def run_test(entity_type):
         entity_text = font.render(f"Test: {entity_type}", True, YELLOW)
         screen.blit(entity_text, (10, 50))
 
-        # Afficher HP du boss si présent
+        # Afficher HP du boss et pattern si présent
         for enemy in enemies:
-            if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5)):
+            if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
                 boss_hp = font.render(f"Boss HP: {enemy.hp}", True, (255, 100, 100))
                 screen.blit(boss_hp, (10, 90))
+
+                # Afficher le pattern actuel
+                pattern_name = get_pattern_name(enemy)
+                pattern_text = font.render(f"Pattern: {enemy.pattern} - {pattern_name}", True, (100, 200, 255))
+                screen.blit(pattern_text, (10, 130))
+
+                # Afficher modes spéciaux si actifs
+                if isinstance(enemy, Boss5) and enemy.rage_mode:
+                    rage_text = font.render("MODE RAGE!", True, (255, 50, 50))
+                    screen.blit(rage_text, (10, 170))
+                elif isinstance(enemy, Boss6) and enemy.fury_mode:
+                    fury_text = font.render("MODE FUREUR!", True, (200, 50, 255))
+                    screen.blit(fury_text, (10, 170))
+                elif isinstance(enemy, Boss6) and enemy.black_hole_active:
+                    bh_text = font.render("TROU NOIR ACTIF", True, (150, 0, 200))
+                    screen.blit(bh_text, (10, 170))
                 break
 
         # Instructions
@@ -387,12 +501,15 @@ def main():
                     if not run_test("Boss 5"):
                         running = False
                 elif event.key == pygame.K_6:
-                    if not run_test("Ennemi basique"):
+                    if not run_test("Boss 6"):
                         running = False
                 elif event.key == pygame.K_7:
-                    if not run_test("Ennemi tireur"):
+                    if not run_test("Ennemi basique"):
                         running = False
                 elif event.key == pygame.K_8:
+                    if not run_test("Ennemi tireur"):
+                        running = False
+                elif event.key == pygame.K_9:
                     if not run_test("Tous les ennemis"):
                         running = False
 
