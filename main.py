@@ -925,6 +925,389 @@ class Boss2(Enemy):
         for exp in self.death_explosions:
             exp.draw(surface)
 
+
+class Boss3Projectile(EnemyProjectile):
+    """Projectiles du Boss 3 - Cyan/électriques"""
+    def __init__(self, x, y, dx, dy, speed=7):
+        super().__init__(x, y, dx, dy, speed)
+        self.image = pygame.Surface((12, 12))
+        self.image.fill(CYAN)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 12
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(6 * progress))
+            color = (0, int(200 * progress), 255, alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, CYAN, self.rect.center, 6)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 3)
+
+
+class HomingProjectile(EnemyProjectile):
+    """Projectile à tête chercheuse pour le Boss 3"""
+    def __init__(self, x, y, speed=4):
+        super().__init__(x, y, 0, 1, speed)
+        self.image = pygame.Surface((10, 10))
+        self.image.fill((255, 100, 100))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.max_trail_length = 15
+        self.lifetime = 180  # 3 secondes max
+        self.timer = 0
+        self.turn_speed = 0.05
+
+        self.trail_cache = []
+        for i in range(self.max_trail_length):
+            progress = i / self.max_trail_length if self.max_trail_length > 0 else 0
+            alpha = int(255 * progress)
+            size = max(2, int(5 * progress))
+            color = (255, int(100 * progress), int(100 * progress), alpha)
+            trail_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, color, (size, size), size)
+            self.trail_cache.append((trail_surf, size))
+
+    def update(self, player_position=None):
+        self.timer += 1
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        # Poursuite du joueur
+        if player_position and self.timer < self.lifetime:
+            px, py = player_position
+            target_dx = px - self.rect.centerx
+            target_dy = py - self.rect.centery
+            dist = math.sqrt(target_dx**2 + target_dy**2)
+            if dist > 0:
+                target_dx /= dist
+                target_dy /= dist
+                # Interpolation vers la cible
+                self.dx += (target_dx - self.dx) * self.turn_speed
+                self.dy += (target_dy - self.dy) * self.turn_speed
+                # Renormaliser
+                d = math.sqrt(self.dx**2 + self.dy**2)
+                if d > 0:
+                    self.dx /= d
+                    self.dy /= d
+
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def is_expired(self):
+        return self.timer >= self.lifetime
+
+    def draw(self, surface):
+        for i, pos in enumerate(self.trail):
+            trail_surf, size = self.trail_cache[i]
+            surface.blit(trail_surf, (pos[0] - size, pos[1] - size))
+
+        pygame.draw.circle(surface, (255, 100, 100), self.rect.center, 5)
+        pygame.draw.circle(surface, (255, 200, 200), self.rect.center, 2)
+
+
+class Boss3(Enemy):
+    """Troisième Boss - Le plus difficile avec des patterns complexes"""
+    def __init__(self, x, y, speed=2, target_y=100):
+        super().__init__(x, y, speed)
+
+        self.size = 140
+        self.image = self._create_boss_sprite()
+        self.rect = self.image.get_rect(center=(x, y))
+        self.hp = 40  # Encore plus de HP
+        self.target_y = target_y
+        self.in_position = False
+        self.timer = 0
+        self.shoot_delay_frames = 12  # Tire encore plus vite
+        self.last_shot_frame = 0
+        self.current_pattern = 0
+        self.pattern_switch_interval = 200  # Change de pattern très souvent
+        self.lateral_movement_speed = 2
+        self.lateral_direction = 1
+
+        # Mouvement sinusoïdal vertical
+        self.vertical_amplitude = 30
+        self.vertical_frequency = 0.02
+
+        # Animation de dégâts
+        self.damage_animation_active = False
+        self.damage_animation_duration = 15
+        self.damage_animation_timer = 0
+        self.damage_flash_interval = 3
+
+        # Animation de mort
+        self.is_dying = False
+        self.death_animation_timer = 0
+        self.death_animation_duration = 240
+        self.death_explosion_timer = 0
+        self.death_explosions = []
+
+        # Variables pour les patterns spéciaux
+        self.wave_angle = 0
+        self.laser_warning_timer = 0
+        self.laser_warning_duration = 60
+        self.laser_active = False
+        self.laser_timer = 0
+        self.laser_duration = 90
+        self.laser_target_x = 0
+
+        # Téléportation
+        self.teleport_cooldown = 300
+        self.last_teleport = -300
+
+        # Pulsation visuelle
+        self.pulse_timer = 0
+        self.core_rotation = 0
+
+    def _create_boss_sprite(self):
+        """Crée un sprite procédural pour le Boss 3 - forme de diamant/cristal"""
+        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        center = self.size // 2
+
+        # Corps principal - forme de diamant
+        diamond_points = [
+            (center, 10),           # Haut
+            (center + 55, center),  # Droite
+            (center, self.size - 10),  # Bas
+            (center - 55, center),  # Gauche
+        ]
+        pygame.draw.polygon(surf, (0, 80, 100), diamond_points)
+        pygame.draw.polygon(surf, (0, 200, 255), diamond_points, 4)
+
+        # Lignes internes
+        pygame.draw.line(surf, (0, 150, 200), (center, 10), (center, self.size - 10), 2)
+        pygame.draw.line(surf, (0, 150, 200), (center - 55, center), (center + 55, center), 2)
+
+        # Œil central
+        pygame.draw.circle(surf, (0, 255, 255), (center, center), 20)
+        pygame.draw.circle(surf, WHITE, (center, center), 12)
+        pygame.draw.circle(surf, (0, 100, 150), (center, center), 6)
+
+        # Petits cristaux sur les côtés
+        for angle in [45, 135, 225, 315]:
+            rad = math.radians(angle)
+            cx = center + math.cos(rad) * 35
+            cy = center + math.sin(rad) * 35
+            pygame.draw.circle(surf, (0, 200, 255), (int(cx), int(cy)), 8)
+            pygame.draw.circle(surf, WHITE, (int(cx), int(cy)), 4)
+
+        return surf
+
+    def _create_damaged_sprite(self):
+        """Crée un sprite endommagé"""
+        surf = self._create_boss_sprite()
+        flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        flash.fill((255, 255, 255, 120))
+        surf.blit(flash, (0, 0))
+        return surf
+
+    def update(self, player_position=None, enemy_projectiles=None):
+        self.timer += 1
+        self.pulse_timer += 1
+        self.core_rotation += 2
+
+        if self.is_dying:
+            self.death_animation_timer += 1
+            progress = self.death_animation_timer / self.death_animation_duration
+
+            if (self.death_animation_timer // 2) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_boss_sprite()
+
+            self.death_explosion_timer += 1
+            explosion_interval = max(1, int(10 * (1 - progress * 0.9)))
+            if self.death_explosion_timer >= explosion_interval:
+                self.death_explosion_timer = 0
+                rand_x = self.rect.left + random.randint(5, self.size - 5)
+                rand_y = self.rect.top + random.randint(5, self.size - 5)
+                self.death_explosions.append(Explosion(rand_x, rand_y, duration=500))
+
+            for exp in self.death_explosions:
+                exp.update()
+            self.death_explosions = [exp for exp in self.death_explosions if not exp.is_finished()]
+
+            if self.death_animation_timer >= self.death_animation_duration:
+                return True
+            return False
+
+        # Animation de dégâts
+        if self.damage_animation_active:
+            self.damage_animation_timer += 1
+            if (self.damage_animation_timer // self.damage_flash_interval) % 2 == 0:
+                self.image = self._create_damaged_sprite()
+            else:
+                self.image = self._create_boss_sprite()
+
+            if self.damage_animation_timer >= self.damage_animation_duration:
+                self.damage_animation_active = False
+                self.damage_animation_timer = 0
+                self.image = self._create_boss_sprite()
+
+        # Déplacement vers la position
+        if not self.in_position:
+            if self.rect.centery < self.target_y:
+                self.rect.y += self.speed
+            else:
+                self.in_position = True
+                print("Boss 3 en position de combat!")
+        else:
+            # Mouvement latéral + oscillation verticale
+            self.rect.x += self.lateral_direction * self.lateral_movement_speed
+            if self.rect.left <= 80 or self.rect.right >= SCREEN_WIDTH - 80:
+                self.lateral_direction *= -1
+
+            # Oscillation verticale
+            vertical_offset = math.sin(self.timer * self.vertical_frequency) * self.vertical_amplitude
+            self.rect.centery = self.target_y + int(vertical_offset)
+
+            # Gestion du laser
+            if self.laser_warning_timer > 0:
+                self.laser_warning_timer -= 1
+                if self.laser_warning_timer == 0:
+                    self.laser_active = True
+                    self.laser_timer = self.laser_duration
+
+            if self.laser_active:
+                self.laser_timer -= 1
+                if self.laser_timer <= 0:
+                    self.laser_active = False
+
+            # Tir
+            if player_position and enemy_projectiles is not None and not self.laser_active:
+                if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
+                    self.last_shot_frame = self.timer
+                    pattern_index = (self.timer // self.pattern_switch_interval) % 6
+                    projectiles = self.shoot_pattern(pattern_index, player_position)
+                    enemy_projectiles.extend(projectiles)
+
+    def shoot_pattern(self, pattern_index, player_position):
+        """Retourne une liste de projectiles - patterns uniques au Boss 3"""
+        projectiles = []
+        bx = self.rect.centerx
+        by = self.rect.bottom - 20
+
+        if pattern_index == 0:
+            # Pattern 0: Vague sinusoïdale de projectiles
+            self.wave_angle += 15
+            for i in range(7):
+                offset = (i - 3) * 25
+                angle = math.radians(self.wave_angle + i * 20)
+                dy = 1
+                dx = math.sin(angle) * 0.3
+                projectiles.append(Boss3Projectile(bx + offset, by, dx, dy, speed=6))
+            print("Boss 3: Vague sinusoïdale!")
+
+        elif pattern_index == 1:
+            # Pattern 1: Tirs en X
+            for angle_deg in [-45, -22, 0, 22, 45]:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)
+                projectiles.append(Boss3Projectile(bx, by, dx, dy, speed=7))
+            for angle_deg in [-45, -22, 0, 22, 45]:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)
+                projectiles.append(Boss3Projectile(bx, by - 30, dx, dy, speed=5))
+            print("Boss 3: Tir en X!")
+
+        elif pattern_index == 2:
+            # Pattern 2: Missiles à tête chercheuse
+            projectiles.append(HomingProjectile(bx - 40, by, speed=3))
+            projectiles.append(HomingProjectile(bx + 40, by, speed=3))
+            print("Boss 3: Missiles guidés!")
+
+        elif pattern_index == 3:
+            # Pattern 3: Mur de projectiles avec trou
+            hole_position = random.randint(1, 5)
+            for i in range(7):
+                if i != hole_position and i != hole_position - 1:
+                    offset_x = (i - 3) * 60
+                    projectiles.append(Boss3Projectile(bx + offset_x, by, 0, 1, speed=5))
+            print("Boss 3: Mur avec trou!")
+
+        elif pattern_index == 4:
+            # Pattern 4: Explosion radiale en deux temps
+            num_projectiles = 12
+            for i in range(num_projectiles):
+                angle = (2 * math.pi / num_projectiles) * i
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                projectiles.append(Boss3Projectile(bx, by, dx, dy, speed=4))
+            print("Boss 3: Explosion radiale!")
+
+        elif pattern_index == 5:
+            # Pattern 5: Préparer le laser (avertissement)
+            if self.laser_warning_timer == 0 and not self.laser_active:
+                self.laser_warning_timer = self.laser_warning_duration
+                self.laser_target_x = player_position[0]
+                print("Boss 3: Laser en charge!")
+
+        return projectiles
+
+    def take_damage(self, amount=1):
+        """Applique des dégâts au boss et déclenche l'animation"""
+        self.hp -= amount
+        self.damage_animation_active = True
+        self.damage_animation_timer = 0
+
+    def draw(self, surface):
+        # Effet de pulsation
+        pulse = abs(math.sin(self.pulse_timer * 0.03)) * 0.3 + 0.7
+
+        if not self.is_dying:
+            # Aura cyan
+            aura_size = int(80 * pulse)
+            aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(aura_surf, (0, 150, 200, 40), (aura_size, aura_size), aura_size)
+            surface.blit(aura_surf, (self.rect.centerx - aura_size, self.rect.centery - aura_size))
+
+            # Orbes en rotation autour du boss
+            for i in range(4):
+                angle = math.radians(self.core_rotation + i * 90)
+                orb_x = self.rect.centerx + math.cos(angle) * 70
+                orb_y = self.rect.centery + math.sin(angle) * 40
+                pygame.draw.circle(surface, (0, 255, 255), (int(orb_x), int(orb_y)), 8)
+                pygame.draw.circle(surface, WHITE, (int(orb_x), int(orb_y)), 4)
+
+        # Avertissement laser
+        if self.laser_warning_timer > 0:
+            warning_alpha = int(150 * abs(math.sin(self.laser_warning_timer * 0.3)))
+            warning_surf = pygame.Surface((40, SCREEN_HEIGHT), pygame.SRCALPHA)
+            warning_surf.fill((255, 0, 0, warning_alpha))
+            surface.blit(warning_surf, (self.laser_target_x - 20, 0))
+
+        # Laser actif
+        if self.laser_active:
+            laser_width = 60
+            laser_surf = pygame.Surface((laser_width, SCREEN_HEIGHT), pygame.SRCALPHA)
+            # Dégradé du laser
+            for i in range(laser_width // 2):
+                alpha = int(200 * (1 - i / (laser_width // 2)))
+                pygame.draw.line(laser_surf, (0, 255, 255, alpha),
+                               (laser_width // 2 - i, 0), (laser_width // 2 - i, SCREEN_HEIGHT))
+                pygame.draw.line(laser_surf, (0, 255, 255, alpha),
+                               (laser_width // 2 + i, 0), (laser_width // 2 + i, SCREEN_HEIGHT))
+            # Cœur du laser
+            pygame.draw.rect(laser_surf, WHITE, (laser_width // 2 - 5, 0, 10, SCREEN_HEIGHT))
+            surface.blit(laser_surf, (self.laser_target_x - laser_width // 2, 0))
+
+        surface.blit(self.image, self.rect)
+
+        for exp in self.death_explosions:
+            exp.draw(surface)
+
+
 class Level:
     def __init__(self):
         self.background = Background(speed=2)
@@ -948,6 +1331,12 @@ class Level:
         self.boss1_defeat_timer = 0
         self.boss2_spawn_delay = 600  # 10 secondes à 60 FPS
         self.boss2_spawned = False
+
+        # Système de spawn du Boss 3
+        self.boss2_defeated = False
+        self.boss2_defeat_timer = 0
+        self.boss3_spawn_delay = 600  # 10 secondes à 60 FPS
+        self.boss3_spawned = False
 
     def spawn_enemies(self, count):
         for _ in range(count):
@@ -973,6 +1362,12 @@ class Level:
         self.enemies.append(boss2)
         self.boss2_spawned = True
         print(f'Spawned Boss 2 at timer {self.timer}')
+
+    def spawn_boss3(self):
+        boss3 = Boss3(SCREEN_WIDTH // 2, -80)
+        self.enemies.append(boss3)
+        self.boss3_spawned = True
+        print(f'Spawned Boss 3 at timer {self.timer}')
 
     def spawn_formation_v(self, count):
         """Spawn des ennemis en formation V"""
@@ -1061,9 +1456,9 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2)):
+            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3)):
                 enemy.update()
-        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2)))]
+        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3)))]
 
         # Gestion du spawn du Boss 2 après défaite du Boss 1
         if self.boss1_defeated and not self.boss2_spawned:
@@ -1071,7 +1466,13 @@ class Level:
             if self.boss1_defeat_timer >= self.boss2_spawn_delay:
                 self.spawn_boss2()
 
-        if any(isinstance(enemy, (Boss, Boss2)) for enemy in self.enemies):
+        # Gestion du spawn du Boss 3 après défaite du Boss 2
+        if self.boss2_defeated and not self.boss3_spawned:
+            self.boss2_defeat_timer += 1
+            if self.boss2_defeat_timer >= self.boss3_spawn_delay:
+                self.spawn_boss3()
+
+        if any(isinstance(enemy, (Boss, Boss2, Boss3)) for enemy in self.enemies):
             if self.background.speed > 0:
                 self.background.speed = max(self.background.speed - 0.05, 0)
         else:
@@ -1331,29 +1732,52 @@ def main():
                         rand_x = enemy.rect.left + random.randint(0, 120)
                         rand_y = enemy.rect.top + random.randint(0, 120)
                         explosions.append(Explosion(rand_x, rand_y, duration=600))
-                    print("Boss 2 vaincu ! Victoire !")
+                    print("Boss 2 vaincu !")
+                    level.boss2_defeated = True
+            elif isinstance(enemy, Boss3):
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    level.enemies.remove(enemy)
+                    for _ in range(12):
+                        rand_x = enemy.rect.left + random.randint(0, 140)
+                        rand_y = enemy.rect.top + random.randint(0, 140)
+                        explosions.append(Explosion(rand_x, rand_y, duration=700))
+                    print("Boss 3 vaincu ! VICTOIRE TOTALE !")
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
 
         for e_proj in enemy_projectiles:
-            e_proj.update()
-        enemy_projectiles = [p for p in enemy_projectiles if (p.rect.top < SCREEN_HEIGHT and 
-                                                              p.rect.left < SCREEN_WIDTH and 
-                                                              p.rect.right > 0)]
+            if isinstance(e_proj, HomingProjectile):
+                e_proj.update(player.rect.center)
+            else:
+                e_proj.update()
+        # Filtrer les projectiles hors écran et les missiles expirés
+        enemy_projectiles = [p for p in enemy_projectiles if (
+            p.rect.top < SCREEN_HEIGHT and
+            p.rect.left < SCREEN_WIDTH and
+            p.rect.right > 0 and
+            p.rect.bottom > 0 and
+            not (isinstance(p, HomingProjectile) and p.is_expired())
+        )]
 
         for projectile in projectiles[:]:
             for enemy in level.enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3)) and enemy.is_dying:
                         continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
                     combo.hit()  # Prolonge le combo
-                    if isinstance(enemy, (Boss, Boss2)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3)):
                         enemy.take_damage(1)
-                        boss_name = "Boss 1" if isinstance(enemy, Boss) else "Boss 2"
+                        if isinstance(enemy, Boss):
+                            boss_name = "Boss 1"
+                        elif isinstance(enemy, Boss2):
+                            boss_name = "Boss 2"
+                        else:
+                            boss_name = "Boss 3"
                         print(f'{boss_name} touché ! HP restant : {enemy.hp}')
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -1387,23 +1811,28 @@ def main():
 
         for enemy in level.enemies[:]:
             if enemy.rect.colliderect(player.rect):
-                if isinstance(enemy, (Boss, Boss2)) and enemy.is_dying:
+                if isinstance(enemy, (Boss, Boss2, Boss3)) and enemy.is_dying:
                     continue
                 if not player.invulnerable:
                     player.hp -= player.contact_damage
                     print(f'Player touché par ennemi ! HP restant : {player.hp}')
-                    if isinstance(enemy, (Boss, Boss2)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3)):
                         enemy.take_damage(player.contact_damage)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
-                            boss_name = "Boss 1" if isinstance(enemy, Boss) else "Boss 2"
+                            if isinstance(enemy, Boss):
+                                boss_name = "Boss 1"
+                            elif isinstance(enemy, Boss2):
+                                boss_name = "Boss 2"
+                            else:
+                                boss_name = "Boss 3"
                             print(f"{boss_name} en train de mourir...")
                     else:
                         enemy.hp -= player.contact_damage
                     impact_x = (player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (player.rect.centery + enemy.rect.centery) // 2
                     explosions.append(Explosion(impact_x, impact_y))
-                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2)):
+                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3)):
                         if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
@@ -1411,6 +1840,20 @@ def main():
                             powerups.append(powerup)
                             print(f"Power-up '{chosen_power}' largué !")
                         level.enemies.remove(enemy)
+                    if player.hp <= 0:
+                        print("Player éliminé ! Game Over.")
+                        running = False
+                    else:
+                        player.invulnerable = True
+                        player.invuln_start = pygame.time.get_ticks()
+
+        # Collision avec le laser du Boss 3
+        for enemy in level.enemies:
+            if isinstance(enemy, Boss3) and enemy.laser_active and not player.invulnerable:
+                laser_rect = pygame.Rect(enemy.laser_target_x - 25, 0, 50, SCREEN_HEIGHT)
+                if player.rect.colliderect(laser_rect):
+                    player.hp -= 2
+                    print(f'Player touché par laser ! HP restant : {player.hp}')
                     if player.hp <= 0:
                         print("Player éliminé ! Game Over.")
                         running = False
