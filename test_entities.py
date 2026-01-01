@@ -6,16 +6,23 @@ Permet de choisir quel boss ou ennemi tester sans jouer tout le jeu.
 import pygame
 import random
 import math
-from main import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW,
-    Player, Projectile, SpreadProjectile, Explosion, PowerUp,
-    Enemy, ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5, Boss6,
-    EnemyProjectile, BossProjectile, Boss2Projectile, Boss3Projectile, Boss4Projectile, Boss5Projectile, Boss6Projectile,
+
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW
+from entities.player import Player
+from entities.projectiles import (
+    Projectile, SpreadProjectile,
+    EnemyProjectile, BossProjectile, Boss2Projectile, Boss3Projectile,
+    Boss4Projectile, Boss5Projectile, Boss6Projectile,
     HomingProjectile, SplittingProjectile, BouncingProjectile,
     ZigZagProjectile, GravityProjectile, TeleportingProjectile,
-    VortexProjectile, BlackHoleProjectile, MirrorProjectile, PulseWaveProjectile,
-    Background, ComboSystem
+    VortexProjectile, BlackHoleProjectile, MirrorProjectile, PulseWaveProjectile
 )
+from entities.powerup import PowerUp
+from entities.enemy import Enemy, ShootingEnemy
+from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
+from graphics.background import Background
+from graphics.effects import Explosion
+from systems.combo import ComboSystem
 
 
 def get_pattern_name(enemy):
