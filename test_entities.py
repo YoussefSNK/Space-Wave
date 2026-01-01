@@ -20,46 +20,18 @@ from main import (
 
 def get_pattern_name(enemy):
     """Retourne le nom du pattern actuel du boss"""
-    if isinstance(enemy, Boss):
+    # Boss6 utilise 'pattern', les autres utilisent 'current_pattern'
+    if isinstance(enemy, Boss6):
         patterns = {
-            0: "Tir ciblé",
-            1: "Spirale",
-            2: "Mur de projectiles",
-            3: "Tir en éventail",
-            4: "Pluie aléatoire"
-        }
-        return patterns.get(enemy.pattern, "Inconnu")
-
-    elif isinstance(enemy, Boss2):
-        patterns = {
-            0: "Spirale",
-            1: "Pluie verticale",
-            2: "Double vague",
-            3: "Croix rotative",
-            4: "Rafale ciblée"
-        }
-        return patterns.get(enemy.pattern, "Inconnu")
-
-    elif isinstance(enemy, Boss3):
-        patterns = {
-            0: "Missiles à tête chercheuse",
-            1: "Mur avec trou",
-            2: "Laser",
-            3: "Vagues convergentes",
-            4: "Pluie en diagonale",
-            5: "Spirale double"
-        }
-        return patterns.get(enemy.pattern, "Inconnu")
-
-    elif isinstance(enemy, Boss4):
-        patterns = {
-            0: "Projectiles rebondissants",
-            1: "Projectiles qui se divisent",
-            2: "Charge",
-            3: "Bouclier + tir radial",
-            4: "Tempête solaire",
-            5: "Rayons de soleil",
-            6: "Nova"
+            0: "Vortex orbital",
+            1: "Ondes de choc",
+            2: "Miroirs diviseurs",
+            3: "Spirale inversée",
+            4: "Trou noir",
+            5: "Mur de distorsion",
+            6: "Étoiles filantes",
+            7: "Double vortex (Fureur)",
+            8: "Apocalypse (Fureur)"
         }
         return patterns.get(enemy.pattern, "Inconnu")
 
@@ -74,21 +46,50 @@ def get_pattern_name(enemy):
             6: "Tempête (Rage)",
             7: "Chaos total (Rage)"
         }
-        return patterns.get(enemy.pattern, "Inconnu")
+        return patterns.get(enemy.current_pattern, "Inconnu")
 
-    elif isinstance(enemy, Boss6):
+    elif isinstance(enemy, Boss4):
         patterns = {
-            0: "Vortex orbital",
-            1: "Ondes de choc",
-            2: "Miroirs diviseurs",
-            3: "Spirale inversée",
-            4: "Trou noir",
-            5: "Mur de distorsion",
-            6: "Étoiles filantes",
-            7: "Double vortex (Fureur)",
-            8: "Apocalypse (Fureur)"
+            0: "Projectiles rebondissants",
+            1: "Projectiles qui se divisent",
+            2: "Charge",
+            3: "Bouclier + tir radial",
+            4: "Tempête solaire",
+            5: "Rayons de soleil",
+            6: "Nova"
         }
-        return patterns.get(enemy.pattern, "Inconnu")
+        return patterns.get(enemy.current_pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss3):
+        patterns = {
+            0: "Missiles à tête chercheuse",
+            1: "Mur avec trou",
+            2: "Laser",
+            3: "Vagues convergentes",
+            4: "Pluie en diagonale",
+            5: "Spirale double"
+        }
+        return patterns.get(enemy.current_pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss2):
+        patterns = {
+            0: "Spirale",
+            1: "Pluie verticale",
+            2: "Double vague",
+            3: "Croix rotative",
+            4: "Rafale ciblée"
+        }
+        return patterns.get(enemy.current_pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss):
+        patterns = {
+            0: "Tir ciblé",
+            1: "Spirale",
+            2: "Mur de projectiles",
+            3: "Tir en éventail",
+            4: "Pluie aléatoire"
+        }
+        return patterns.get(enemy.current_pattern, "Inconnu")
 
     return ""
 
@@ -438,7 +439,8 @@ def run_test(entity_type):
 
                 # Afficher le pattern actuel
                 pattern_name = get_pattern_name(enemy)
-                pattern_text = font.render(f"Pattern: {enemy.pattern} - {pattern_name}", True, (100, 200, 255))
+                pattern_num = enemy.pattern if isinstance(enemy, Boss6) else enemy.current_pattern
+                pattern_text = font.render(f"Pattern: {pattern_num} - {pattern_name}", True, (100, 200, 255))
                 screen.blit(pattern_text, (10, 130))
 
                 # Afficher modes spéciaux si actifs
