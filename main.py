@@ -3,6 +3,8 @@ from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from screens.menu import MenuScreen
 from screens.level_select import LevelSelectScreen
 from screens.game_screen import GameScreen
+from screens.lobby import LobbyScreen
+from screens.multiplayer_game import MultiplayerGameScreen
 
 
 def main():
@@ -12,6 +14,7 @@ def main():
 
     current_screen = "menu"
     selected_level = 1
+    network_client = None
 
     while current_screen is not None:
         if current_screen == "menu":
@@ -27,6 +30,21 @@ def main():
         elif current_screen == "game":
             game = GameScreen(screen, level_num=selected_level)
             current_screen = game.run()
+
+        elif current_screen == "lobby":
+            lobby = LobbyScreen(screen)
+            current_screen = lobby.run()
+            if current_screen == "multiplayer_game":
+                network_client = lobby.get_client()
+
+        elif current_screen == "multiplayer_game":
+            if network_client:
+                mp_game = MultiplayerGameScreen(screen, network_client)
+                current_screen = mp_game.run()
+                network_client.disconnect()
+                network_client = None
+            else:
+                current_screen = "menu"
 
     pygame.quit()
 

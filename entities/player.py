@@ -2,15 +2,34 @@ import pygame
 import random
 import math
 
-from config import YELLOW
+from config import YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT
 from .projectiles import Projectile, SpreadProjectile
 
 
 class Player:
-    def __init__(self, x, y):
-        self.image = pygame.image.load("sprites/Spaceship.png").convert_alpha()
-        self.image = pygame.transform.scale(self.image, (50, 50))
-        self.rect = self.image.get_rect(center=(x, y))
+    def __init__(self, x, y, player_id=1, is_local=True, headless=False):
+        self.player_id = player_id
+        self.is_local = is_local
+        self.headless = headless  # Mode sans graphiques (pour le serveur)
+
+        # Charger le sprite seulement si on n'est pas en mode headless
+        if not headless:
+            try:
+                self.image = pygame.image.load("sprites/Spaceship.png").convert_alpha()
+                self.image = pygame.transform.scale(self.image, (50, 50))
+
+                # Joueur 2 : teinte bleue pour le différencier
+                if player_id == 2:
+                    self.image = self._tint_image(self.image, (100, 150, 255))
+
+                self.rect = self.image.get_rect(center=(x, y))
+            except Exception:
+                # Fallback si le sprite ne charge pas
+                self.image = None
+                self.rect = pygame.Rect(x - 25, y - 25, 50, 50)
+        else:
+            self.image = None
+            self.rect = pygame.Rect(x - 25, y - 25, 50, 50)
         self.shoot_delay = 250
         self.last_shot = pygame.time.get_ticks()
         self.hp = 10
@@ -27,9 +46,54 @@ class Player:
         self.thruster_particles = []
         self.thruster_timer = 0
 
+        # Contrôles clavier
+        self.speed = 7
+        self.dx = 0
+        self.dy = 0
+        self.wants_to_shoot = False
+
+    def _tint_image(self, image, tint_color):
+        """Applique une teinte de couleur au sprite."""
+        tinted = image.copy()
+        tint_surface = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+        tint_surface.fill((*tint_color, 100))
+        tinted.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        return tinted
+
+    def handle_input(self, keys):
+        """Gère les inputs clavier (ZQSD + Espace)."""
+        self.dx = 0
+        self.dy = 0
+
+        if keys[pygame.K_z] or keys[pygame.K_UP]:
+            self.dy = -1
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.dy = 1
+        if keys[pygame.K_q] or keys[pygame.K_LEFT]:
+            self.dx = -1
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.dx = 1
+
+        # Normaliser la diagonale
+        if self.dx != 0 and self.dy != 0:
+            self.dx *= 0.707
+            self.dy *= 0.707
+
+        self.wants_to_shoot = keys[pygame.K_SPACE]
+
+    def set_input(self, dx, dy, shoot):
+        """Définit les inputs manuellement (pour le réseau)."""
+        self.dx = dx
+        self.dy = dy
+        self.wants_to_shoot = shoot
+
     def update(self):
-        pos = pygame.mouse.get_pos()
-        self.rect.center = pos
+        # Appliquer le mouvement
+        self.rect.x += self.dx * self.speed
+        self.rect.y += self.dy * self.speed
+
+        # Garder le joueur dans l'écran
+        self.rect.clamp_ip(pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
         if self.invulnerable:
             now = pygame.time.get_ticks()
             if now - self.invuln_start >= self.invuln_duration:

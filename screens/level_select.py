@@ -84,6 +84,14 @@ class LevelSelectScreen(Screen):
             50, SCREEN_HEIGHT - 80, 150, 45, "← Retour", font_size=32
         )
 
+        # Bouton multijoueur
+        self.multiplayer_button = Button(
+            SCREEN_WIDTH - 250, SCREEN_HEIGHT - 80, 200, 45, "Multijoueur", font_size=32
+        )
+        self.multiplayer_button.color_normal = (60, 40, 100)
+        self.multiplayer_button.color_hover = (90, 60, 140)
+        self.multiplayer_button.color_border = (120, 80, 180)
+
     def handle_event(self, event):
         for i, button in enumerate(self.level_buttons):
             if button.handle_event(event):
@@ -93,6 +101,10 @@ class LevelSelectScreen(Screen):
 
         if self.back_button.handle_event(event):
             self.next_screen = "menu"
+            self.running = False
+
+        if self.multiplayer_button.handle_event(event):
+            self.next_screen = "lobby"
             self.running = False
 
     def update(self):
@@ -130,11 +142,8 @@ class LevelSelectScreen(Screen):
         # Bouton retour
         self.back_button.draw(self.screen)
 
-        # Info multijoueur (préparation future)
-        hint_font = pygame.font.SysFont(None, 20)
-        hint_text = hint_font.render("Mode solo - Multijoueur bientôt disponible", True, (80, 80, 100))
-        hint_rect = hint_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30))
-        self.screen.blit(hint_text, hint_rect)
+        # Bouton multijoueur
+        self.multiplayer_button.draw(self.screen)
 
     def get_selected_level(self):
         """Retourne le niveau sélectionné."""

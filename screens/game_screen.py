@@ -33,25 +33,27 @@ class GameScreen(Screen):
         self.font = pygame.font.SysFont(None, 36)
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
+        if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.KEYDOWN:
             if self.game_over or self.victory:
-                # Retour au menu après game over ou victoire
                 self.next_screen = "menu"
                 self.running = False
-            elif not self.paused:
-                self.player.shoot(self.projectiles)
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                if self.game_over or self.victory:
-                    self.next_screen = "menu"
-                    self.running = False
-                else:
+                if not self.game_over and not self.victory:
                     self.paused = not self.paused
 
     def update(self):
         if self.paused or self.game_over or self.victory:
             return
+
+        # Gestion des inputs clavier
+        keys = pygame.key.get_pressed()
+        self.player.handle_input(keys)
+
+        # Tir avec Espace ou clic souris
+        if self.player.wants_to_shoot or pygame.mouse.get_pressed()[0]:
+            self.player.shoot(self.projectiles)
 
         self.level.update()
         self.player.update()
