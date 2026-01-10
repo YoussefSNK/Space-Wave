@@ -2,6 +2,7 @@
 
 import pygame
 import math
+import random
 from screens.base import Screen
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, BLACK, WHITE, CYAN, RED, YELLOW
 from graphics.background import Background
@@ -249,6 +250,29 @@ class MultiplayerGameScreen(Screen):
             player.hp = p_data.get("hp", player.hp)
             player.power_type = p_data.get("power_type", "normal")
             player.invulnerable = p_data.get("invulnerable", False)
+
+            # particules du thruster
+            player.thruster_timer += 1
+            if player.thruster_timer % 2 == 0:
+                base_x = player.rect.centerx
+                base_y = player.rect.bottom - 5
+                for _ in range(2):
+                    particle = {
+                        'x': base_x + random.uniform(-8, 8),
+                        'y': base_y,
+                        'vx': random.uniform(-0.5, 0.5),
+                        'vy': random.uniform(2, 4),
+                        'life': random.randint(10, 20),
+                        'max_life': 20,
+                        'size': random.uniform(3, 6),
+                    }
+                    player.thruster_particles.append(particle)
+            for p in player.thruster_particles:
+                p['x'] += p['vx']
+                p['y'] += p['vy']
+                p['life'] -= 1
+                p['size'] = max(0, p['size'] - 0.2)
+            player.thruster_particles = [p for p in player.thruster_particles if p['life'] > 0]
 
     def _sync_enemies(self):
         """Synchronise les ennemis depuis le serveur."""
