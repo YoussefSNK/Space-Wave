@@ -166,13 +166,24 @@ class LobbyScreen(Screen):
 
         def connect():
             self.client = GameClient()
-            ip = self.ip_input.text.strip() or "localhost"
-            if self.client.connect(ip, 5555):
-                self.state = "browse"
-                self.client.request_lobby_list()
+            ip = self.ip_input.text.strip()
+
+            if ip:
+                servers = [ip]
             else:
-                self.error_message = "Impossible de se connecter au serveur"
-                self.state = "disconnected"
+                servers = ["localhost", "space-wave.onrender.com"]
+
+            for server in servers:
+                print(f"Tentative de connexion à {server}...")
+                if self.client.connect(server, 5555):
+                    print(f"Connecté à {server}")
+                    self.state = "browse"
+                    self.client.request_lobby_list()
+                    return
+                print(f"Échec de connexion à {server}")
+
+            self.error_message = "Impossible de se connecter aux serveurs"
+            self.state = "disconnected"
 
         thread = threading.Thread(target=connect, daemon=True)
         thread.start()
