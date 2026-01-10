@@ -4,8 +4,13 @@ import asyncio
 import random
 import uuid
 import pygame
+import sys
+import os
 from typing import Dict, Tuple, Optional, List
 from dataclasses import dataclass, field
+
+# Ajouter le répertoire parent au PYTHONPATH pour trouver config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from systems.level import Level
