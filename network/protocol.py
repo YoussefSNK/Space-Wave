@@ -90,10 +90,9 @@ class Message:
         })
 
     def to_bytes(self) -> bytes:
+        # WebSockets gère le framing automatiquement, pas besoin de préfixe de longueur
         json_str = self.to_json()
-        # Préfixe avec la longueur du message (4 bytes)
-        length = len(json_str.encode('utf-8'))
-        return length.to_bytes(4, 'big') + json_str.encode('utf-8')
+        return json_str.encode('utf-8')
 
     @classmethod
     def from_json(cls, json_str: str) -> 'Message':

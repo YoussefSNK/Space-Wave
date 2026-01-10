@@ -6,6 +6,7 @@ import uuid
 import pygame
 import sys
 import os
+import websockets
 from typing import Dict, Tuple, Optional, List
 from dataclasses import dataclass, field
 
@@ -36,7 +37,7 @@ class ServerPlayer:
     """État d'un joueur côté serveur."""
     player_id: int
     name: str
-    writer: asyncio.StreamWriter
+    websocket: websockets.WebSocketServerProtocol
     lobby_id: Optional[str] = None
     player: Player = field(default=None)
     dx: float = 0
@@ -112,65 +113,47 @@ class GameServer:
 
     async def start(self):
         """Démarre le serveur."""
-        server = await asyncio.start_server(
-            self._handle_client, self.host, self.port
-        )
         self.running = True
-        print(f"Serveur démarré sur {self.host}:{self.port}")
+        print(f"Serveur WebSocket démarré sur ws://{self.host}:{self.port}")
         print("En attente de connexions...")
 
-        async with server:
-            # Lancer la boucle de jeu pour tous les lobbies
-            game_task = asyncio.create_task(self._game_loop())
-            await server.serve_forever()
+        # Lancer la boucle de jeu pour tous les lobbies
+        game_task = asyncio.create_task(self._game_loop())
 
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        # Démarrer le serveur WebSocket
+        async with websockets.serve(self._handle_client, self.host, self.port):
+            await asyncio.Future()  # Run forever
+
+    async def _handle_client(self, websocket: websockets.WebSocketServerProtocol):
         """Gère la connexion d'un client."""
         player_id = self.next_player_id
         self.next_player_id += 1
 
-        addr = writer.get_extra_info('peername')
+        addr = websocket.remote_address
         print(f"Nouvelle connexion #{player_id} de {addr}")
 
         # Créer le joueur (sans nom pour l'instant)
         player = ServerPlayer(
             player_id=player_id,
             name=f"Joueur{player_id}",
-            writer=writer
+            websocket=websocket
         )
         self.clients[player_id] = player
 
         try:
-            while self.running:
-                # Lire exactement 4 bytes pour la longueur
-                length_data = await reader.readexactly(4)
-                if not length_data:
-                    break
-
-                length = int.from_bytes(length_data, 'big')
-                # Lire exactement le nombre de bytes attendus
-                data = await reader.readexactly(length)
-                if not data:
-                    break
-
-                msg = Message.from_bytes(data)
+            async for message in websocket:
+                # WebSockets reçoit directement les messages complets
+                msg = Message.from_bytes(message.encode('utf-8') if isinstance(message, str) else message)
                 await self._process_message(msg, player_id)
 
-        except asyncio.IncompleteReadError:
+        except websockets.exceptions.ConnectionClosed:
             print(f"Client #{player_id}: connexion fermée")
         except asyncio.CancelledError:
             pass
-        except (ConnectionResetError, ConnectionAbortedError, OSError) as e:
-            print(f"Client #{player_id}: déconnexion ({type(e).__name__})")
         except Exception as e:
             print(f"Erreur client #{player_id}: {e}")
         finally:
             await self._disconnect_player(player_id)
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass  # Ignorer les erreurs de fermeture
             print(f"Client #{player_id} déconnecté")
 
     async def _process_message(self, msg: Message, player_id: int):
@@ -183,7 +166,7 @@ class GameServer:
             # Envoyer la liste des lobbies disponibles
             lobbies = [lobby.to_dict() for lobby in self.lobbies.values()
                       if not lobby.game_started and len(lobby.players) < lobby.max_players]
-            await self._send(player.writer, msg_lobby_list(lobbies))
+            await self._send(player.websocket, msg_lobby_list(lobbies))
 
         elif msg.type == MessageType.CREATE_LOBBY:
             player_name = msg.data.get("player_name", f"Joueur{player_id}")
@@ -208,7 +191,7 @@ class GameServer:
             player.ready = False
             lobby.players[player_id] = player
 
-            await self._send(player.writer, msg_lobby_created(lobby_id, player_id))
+            await self._send(player.websocket, msg_lobby_created(lobby_id, player_id))
             print(f"Lobby '{lobby_name}' créé par {player_name}")
 
         elif msg.type == MessageType.JOIN_LOBBY:
@@ -217,15 +200,15 @@ class GameServer:
 
             lobby = self.lobbies.get(lobby_id)
             if not lobby:
-                await self._send(player.writer, msg_lobby_error("Lobby introuvable"))
+                await self._send(player.websocket, msg_lobby_error("Lobby introuvable"))
                 return
 
             if lobby.game_started:
-                await self._send(player.writer, msg_lobby_error("Partie déjà en cours"))
+                await self._send(player.websocket, msg_lobby_error("Partie déjà en cours"))
                 return
 
             if len(lobby.players) >= lobby.max_players:
-                await self._send(player.writer, msg_lobby_error("Lobby plein"))
+                await self._send(player.websocket, msg_lobby_error("Lobby plein"))
                 return
 
             # Quitter l'ancien lobby si besoin
@@ -239,7 +222,7 @@ class GameServer:
             lobby.players[player_id] = player
 
             # Notifier tous les joueurs du lobby
-            await self._send(player.writer, msg_lobby_joined(lobby_id, player_id, lobby.get_players_info()))
+            await self._send(player.websocket, msg_lobby_joined(lobby_id, player_id, lobby.get_players_info()))
             await self._broadcast_to_lobby(lobby, msg_player_joined(player_id, player_name), exclude=player_id)
             print(f"{player_name} a rejoint le lobby '{lobby.name}'")
 
@@ -689,14 +672,13 @@ class GameServer:
         for player_id, player in list(lobby.players.items()):
             if player_id != exclude:
                 try:
-                    await self._send(player.writer, msg)
+                    await self._send(player.websocket, msg)
                 except Exception as e:
                     print(f"Erreur envoi à joueur #{player_id}: {e}")
 
-    async def _send(self, writer: asyncio.StreamWriter, msg: Message):
+    async def _send(self, websocket: websockets.WebSocketServerProtocol, msg: Message):
         """Envoie un message à un client."""
-        writer.write(msg.to_bytes())
-        await writer.drain()
+        await websocket.send(msg.to_bytes())
 
 
 async def run_server(host: str = "0.0.0.0", port: int = 5555):

@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+import websockets
 from typing import Optional, Callable, Dict, List, Any
 from queue import Queue, Empty
 
@@ -16,8 +17,7 @@ class GameClient:
     """Client de jeu pour se connecter au serveur central."""
 
     def __init__(self):
-        self.reader: Optional[asyncio.StreamReader] = None
-        self.writer: Optional[asyncio.StreamWriter] = None
+        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         self.player_id: Optional[int] = None
         self.lobby_id: Optional[str] = None
@@ -91,9 +91,10 @@ class GameClient:
     async def _async_connect(self, host: str, port: int):
         """Connexion asynchrone au serveur."""
         try:
-            self.reader, self.writer = await asyncio.open_connection(host, port)
+            uri = f"ws://{host}:{port}"
+            self.websocket = await websockets.connect(uri)
             self.connected = True
-            print(f"Connecté à {host}:{port}")
+            print(f"Connecté à {uri}")
 
             # Lancer les tâches de réception et d'envoi
             recv_task = asyncio.create_task(self._receive_loop())
@@ -102,7 +103,7 @@ class GameClient:
             await asyncio.gather(recv_task, send_task)
 
         except ConnectionRefusedError:
-            print(f"Impossible de se connecter à {host}:{port}")
+            print(f"Impossible de se connecter à ws://{host}:{port}")
             self._running = False
         except Exception as e:
             print(f"Erreur connexion: {e}")
@@ -111,24 +112,14 @@ class GameClient:
     async def _receive_loop(self):
         """Boucle de réception des messages."""
         try:
-            while self._running and self.connected:
-                # Lire la longueur du message (exactement 4 bytes)
-                length_data = await self.reader.readexactly(4)
-                if not length_data:
-                    break
-
-                length = int.from_bytes(length_data, 'big')
-                # Lire exactement le nombre de bytes attendus
-                data = await self.reader.readexactly(length)
-                if not data:
-                    break
-
-                msg = Message.from_bytes(data)
+            async for message in self.websocket:
+                # WebSockets reçoit directement les messages complets
+                msg = Message.from_bytes(message.encode('utf-8') if isinstance(message, str) else message)
                 self._process_message(msg)
 
         except asyncio.CancelledError:
             pass
-        except asyncio.IncompleteReadError:
+        except websockets.exceptions.ConnectionClosed:
             print("Connexion fermée par le serveur")
         except Exception as e:
             print(f"Erreur réception: {e}")
@@ -153,9 +144,8 @@ class GameClient:
 
     async def _async_send(self, msg: Message):
         """Envoie un message au serveur."""
-        if self.writer:
-            self.writer.write(msg.to_bytes())
-            await self.writer.drain()
+        if self.websocket:
+            await self.websocket.send(msg.to_bytes())
 
     def _process_message(self, msg: Message):
         """Traite un message reçu du serveur."""
