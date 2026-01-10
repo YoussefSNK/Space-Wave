@@ -310,6 +310,15 @@ class MultiplayerGameScreen(Screen):
                     enemy.damage_animation_active = True
                     enemy.damage_animation_timer = 0
 
+                # Synchroniser l'animation de tir pour Boss 1
+                if isinstance(enemy, Boss):
+                    shoot_anim = e_data.get("animation_active", False)
+                    if shoot_anim and not enemy.animation_active:
+                        enemy.animation_active = True
+                        enemy.current_animation_frame = 0
+                        enemy.animation_timer = 0
+                        enemy.image = enemy.shoot_animation_frames[0]
+
                 # Mettre à jour les animations localement (comme en solo)
                 self._update_boss_animation(enemy)
 
@@ -471,6 +480,18 @@ class MultiplayerGameScreen(Screen):
                     enemy.damage_animation_active = False
                     enemy.damage_animation_timer = 0
                     enemy.image = enemy.sprite_normal
+            elif enemy.animation_active:
+                # Animation de tir (bouche)
+                enemy.animation_timer += 1
+                if enemy.animation_timer >= enemy.frames_per_animation_step:
+                    enemy.animation_timer = 0
+                    enemy.current_animation_frame += 1
+                    if enemy.current_animation_frame >= len(enemy.shoot_animation_frames):
+                        enemy.animation_active = False
+                        enemy.current_animation_frame = 0
+                        enemy.image = enemy.sprite_normal
+                    else:
+                        enemy.image = enemy.shoot_animation_frames[enemy.current_animation_frame]
             elif enemy.is_dying:
                 frame = (enemy.timer // 5) % 2
                 if frame == 0:
