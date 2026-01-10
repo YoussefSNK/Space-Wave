@@ -705,4 +705,7 @@ async def run_server(host: str = "0.0.0.0", port: int = 5555):
 
 
 if __name__ == "__main__":
-    asyncio.run(run_server())
+    import os
+    # Sur Render, utiliser la variable d'environnement PORT
+    port = int(os.environ.get("PORT", 5555))
+    asyncio.run(run_server(port=port))
