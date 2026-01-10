@@ -91,7 +91,18 @@ class GameClient:
     async def _async_connect(self, host: str, port: int):
         """Connexion asynchrone au serveur."""
         try:
-            uri = f"ws://{host}:{port}"
+            # Détecter si l'host est une URL complète (commence par ws:// ou wss://)
+            if host.startswith("ws://") or host.startswith("wss://"):
+                uri = host  # Utiliser l'URL complète fournie
+            # Détecter si c'est une URL HTTPS/render (contient .onrender.com, .herokuapp.com, etc.)
+            elif ".onrender.com" in host or ".herokuapp.com" in host or host.startswith("https://"):
+                # Nettoyer l'URL si elle commence par https://
+                clean_host = host.replace("https://", "").replace("http://", "")
+                uri = f"wss://{clean_host}"  # Utiliser WSS pour les services cloud
+            else:
+                # Connexion locale ou par IP
+                uri = f"ws://{host}:{port}"
+
             self.websocket = await websockets.connect(uri)
             self.connected = True
             print(f"Connecté à {uri}")
@@ -103,7 +114,7 @@ class GameClient:
             await asyncio.gather(recv_task, send_task)
 
         except ConnectionRefusedError:
-            print(f"Impossible de se connecter à ws://{host}:{port}")
+            print(f"Impossible de se connecter à {host}")
             self._running = False
         except Exception as e:
             print(f"Erreur connexion: {e}")
