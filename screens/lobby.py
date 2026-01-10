@@ -112,9 +112,8 @@ class LobbyScreen(Screen):
         )
 
         self.ip_input = TextInput(
-            center_x - 150, 180, 300, 40, "IP du serveur"
+            center_x - 150, 180, 300, 40, "IP du serveur (optionnel)"
         )
-        self.ip_input.text = "localhost"
 
         # Boutons - Connexion
         self.connect_button = Button(
@@ -171,7 +170,7 @@ class LobbyScreen(Screen):
             if ip:
                 servers = [ip]
             else:
-                servers = ["localhost", "space-wave.onrender.com"]
+                servers = ["space-wave.onrender.com", "localhost"]
 
             for server in servers:
                 print(f"Tentative de connexion à {server}...")
