@@ -300,6 +300,10 @@ class MultiplayerGameScreen(Screen):
             if isinstance(enemy, Boss4):
                 enemy.charging = e_data.get("charging", False)
 
+            # Mettre à jour les pupilles du Boss1 côté client
+            if isinstance(enemy, Boss):
+                self._update_boss1_eyes(enemy)
+
         # Supprimer les ennemis absents
         for eid in list(self.enemies.keys()):
             if eid not in server_ids:
@@ -369,6 +373,59 @@ class MultiplayerGameScreen(Screen):
         for key in list(self.powerups.keys()):
             if key not in server_keys:
                 del self.powerups[key]
+
+    def _update_boss1_eyes(self, boss):
+        """Met à jour les pupilles du Boss1 pour qu'elles suivent les joueurs."""
+        import math
+
+        # Récupérer les joueurs vivants triés par player_id
+        alive_players = [p for p in sorted(self.players.values(), key=lambda x: x.player_id)
+                        if p.hp > 0]
+
+        # Déterminer les cibles pour chaque œil
+        left_eye_target = None
+        right_eye_target = None
+
+        if len(alive_players) >= 2:
+            # Deux joueurs vivants : œil gauche suit joueur 1, œil droit suit joueur 2
+            left_eye_target = alive_players[0].rect.center
+            right_eye_target = alive_players[1].rect.center
+        elif len(alive_players) == 1:
+            # Un seul joueur vivant : les deux yeux le suivent
+            left_eye_target = alive_players[0].rect.center
+            right_eye_target = alive_players[0].rect.center
+
+        # Mise à jour de l'œil gauche
+        if left_eye_target:
+            px, py = left_eye_target
+            eye_left_world_x = boss.rect.left + boss.eye_left_center[0]
+            eye_left_world_y = boss.rect.top + boss.eye_left_center[1]
+            dx_left = px - eye_left_world_x
+            dy_left = py - eye_left_world_y
+            dist_left = math.sqrt(dx_left**2 + dy_left**2)
+
+            if dist_left > 0:
+                dx_left /= dist_left
+                dy_left /= dist_left
+                max_offset_x_left = boss.eye_left_radius_x - 3
+                max_offset_y_left = boss.eye_left_radius_y - 3
+                boss.pupil_left_offset = (dx_left * max_offset_x_left, dy_left * max_offset_y_left)
+
+        # Mise à jour de l'œil droit
+        if right_eye_target:
+            px, py = right_eye_target
+            eye_right_world_x = boss.rect.left + boss.eye_right_center[0]
+            eye_right_world_y = boss.rect.top + boss.eye_right_center[1]
+            dx_right = px - eye_right_world_x
+            dy_right = py - eye_right_world_y
+            dist_right = math.sqrt(dx_right**2 + dy_right**2)
+
+            if dist_right > 0:
+                dx_right /= dist_right
+                dy_right /= dist_right
+                max_offset_x_right = boss.eye_right_radius_x - 3
+                max_offset_y_right = boss.eye_right_radius_y - 3
+                boss.pupil_right_offset = (dx_right * max_offset_x_right, dy_right * max_offset_y_right)
 
     def _update_boss_animation(self, enemy):
         """Met à jour les animations d'un boss localement (reproduit la logique solo)."""

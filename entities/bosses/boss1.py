@@ -64,7 +64,7 @@ class Boss(Enemy):
         self.eye_right_radius_y = 10
         self.pupil_right_offset = (0, 0)
 
-    def update(self, player_position=None, enemy_projectiles=None):
+    def update(self, player_position=None, enemy_projectiles=None, player_position2=None):
         self.timer += 1
 
         if self.is_dying:
@@ -143,9 +143,18 @@ class Boss(Enemy):
                     self.animation_timer = 0
                     self.image = self.shoot_animation_frames[0]
 
-        if player_position:
-            px, py = player_position
+        # Déterminer les positions pour chaque œil
+        # Si player_position2 est None ou si player_position est None, utiliser la position disponible pour les deux yeux
+        left_eye_target = player_position
+        right_eye_target = player_position2 if player_position2 else player_position
 
+        # Si player_position est None mais player_position2 existe, utiliser player_position2 pour les deux
+        if not left_eye_target and right_eye_target:
+            left_eye_target = right_eye_target
+
+        # Mise à jour de l'œil gauche
+        if left_eye_target:
+            px, py = left_eye_target
             eye_left_world_x = self.rect.left + self.eye_left_center[0]
             eye_left_world_y = self.rect.top + self.eye_left_center[1]
             dx_left = px - eye_left_world_x
@@ -159,6 +168,9 @@ class Boss(Enemy):
                 max_offset_y_left = self.eye_left_radius_y - 3
                 self.pupil_left_offset = (dx_left * max_offset_x_left, dy_left * max_offset_y_left)
 
+        # Mise à jour de l'œil droit
+        if right_eye_target:
+            px, py = right_eye_target
             eye_right_world_x = self.rect.left + self.eye_right_center[0]
             eye_right_world_y = self.rect.top + self.eye_right_center[1]
             dx_right = px - eye_right_world_x

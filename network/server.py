@@ -422,7 +422,13 @@ class GameServer:
                     self._create_boss_explosions(lobby, enemy, 8, 120, 600)
                     lobby.level.boss2_defeated = True
             elif isinstance(enemy, Boss):
-                result = enemy.update(target, lobby.enemy_projectiles)
+                # Pour Boss1, passer les positions des deux joueurs séparément
+                # On récupère les joueurs vivants dans l'ordre
+                alive_players = [sp for sp in sorted(lobby.players.values(), key=lambda p: p.player_id)
+                                if sp.player and sp.player.hp > 0]
+                player1_pos = alive_players[0].player.rect.center if len(alive_players) > 0 else None
+                player2_pos = alive_players[1].player.rect.center if len(alive_players) > 1 else None
+                result = enemy.update(player1_pos, lobby.enemy_projectiles, player2_pos)
                 if result is True:
                     lobby.level.enemies.remove(enemy)
                     self._create_boss_explosions(lobby, enemy, 5, 100, 500)
