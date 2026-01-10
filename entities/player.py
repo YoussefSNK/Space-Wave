@@ -4,6 +4,7 @@ import math
 
 from config import YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT
 from .projectiles import Projectile, SpreadProjectile
+from resource_path import resource_path
 
 
 class Player:
@@ -15,7 +16,7 @@ class Player:
         # Charger le sprite seulement si on n'est pas en mode headless
         if not headless:
             try:
-                self.image = pygame.image.load("sprites/Spaceship.png").convert_alpha()
+                self.image = pygame.image.load(resource_path("sprites/Spaceship.png")).convert_alpha()
                 self.image = pygame.transform.scale(self.image, (50, 50))
 
                 # Joueur 2 : teinte bleue pour le différencier

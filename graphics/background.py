@@ -2,6 +2,7 @@ import pygame
 import random
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE
+from resource_path import resource_path
 
 
 class Background:
@@ -9,7 +10,7 @@ class Background:
         self.speed = speed
         self.default_speed = speed
         if image_path:
-            self.image = pygame.image.load(image_path).convert()
+            self.image = pygame.image.load(resource_path(image_path)).convert()
             self.image = pygame.transform.scale(self.image, (SCREEN_WIDTH, SCREEN_HEIGHT))
         else:
             self.image = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))

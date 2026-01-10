@@ -6,21 +6,22 @@ from config import SCREEN_WIDTH, BLACK
 from graphics.effects import Explosion
 from entities.enemy import Enemy
 from entities.projectiles import BossProjectile
+from resource_path import resource_path
 
 
 class Boss(Enemy):
     def __init__(self, x, y, speed=2, target_y=150):
         super().__init__(x, y, speed)
 
-        self.sprite_normal = pygame.image.load("sprites/Miedd.png").convert_alpha()
+        self.sprite_normal = pygame.image.load(resource_path("sprites/Miedd.png")).convert_alpha()
         self.sprite_normal = pygame.transform.scale(self.sprite_normal, (100, 100))
-        self.sprite_shoot_1 = pygame.image.load("sprites/Miedd_shoot_1.png").convert_alpha()
+        self.sprite_shoot_1 = pygame.image.load(resource_path("sprites/Miedd_shoot_1.png")).convert_alpha()
         self.sprite_shoot_1 = pygame.transform.scale(self.sprite_shoot_1, (100, 100))
-        self.sprite_shoot_2 = pygame.image.load("sprites/Miedd_shoot_2.png").convert_alpha()
+        self.sprite_shoot_2 = pygame.image.load(resource_path("sprites/Miedd_shoot_2.png")).convert_alpha()
         self.sprite_shoot_2 = pygame.transform.scale(self.sprite_shoot_2, (100, 100))
-        self.sprite_damaged_1 = pygame.image.load("sprites/Miedd_damaged.png").convert_alpha()
+        self.sprite_damaged_1 = pygame.image.load(resource_path("sprites/Miedd_damaged.png")).convert_alpha()
         self.sprite_damaged_1 = pygame.transform.scale(self.sprite_damaged_1, (100, 100))
-        self.sprite_damaged_2 = pygame.image.load("sprites/Miedd_damaged_2.png").convert_alpha()
+        self.sprite_damaged_2 = pygame.image.load(resource_path("sprites/Miedd_damaged_2.png")).convert_alpha()
         self.sprite_damaged_2 = pygame.transform.scale(self.sprite_damaged_2, (100, 100))
 
         self.image = self.sprite_normal
