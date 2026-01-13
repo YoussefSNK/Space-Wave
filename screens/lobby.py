@@ -144,7 +144,7 @@ class LobbyScreen(Screen):
 
         # Boutons - Dans le lobby
         self.ready_button = Button(
-            center_x - 100, SCREEN_HEIGHT - 150, 200, 50, "Prêt !", font_size=36
+            center_x - 100, SCREEN_HEIGHT - 500, 200, 50, "Prêt !", font_size=36
         )
         self.ready_button.color_normal = (40, 100, 40)
         self.ready_button.color_hover = (60, 140, 60)
