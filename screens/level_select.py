@@ -86,7 +86,7 @@ class LevelSelectScreen(Screen):
 
         # Bouton multijoueur
         self.multiplayer_button = Button(
-            SCREEN_WIDTH - 250, SCREEN_HEIGHT - 80, 200, 45, "Multijoueur", font_size=32
+            SCREEN_WIDTH - 250, SCREEN_HEIGHT - 800, 200, 45, "Multijoueur", font_size=32
         )
         self.multiplayer_button.color_normal = (60, 40, 100)
         self.multiplayer_button.color_hover = (90, 60, 140)
