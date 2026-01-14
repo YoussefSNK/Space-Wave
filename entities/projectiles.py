@@ -57,6 +57,38 @@ class SpreadProjectile(Projectile):
         self.rect.y += int(self.dy)
 
 
+class RicochetProjectile(Projectile):
+    """Projectile qui rebondit sur les ennemis dans un angle aleatoire (demi-cercle superieur)"""
+    def __init__(self, x, y, speed=10, max_ricochets=2):
+        super().__init__(x, y, speed)
+        self.max_ricochets = max_ricochets
+        self.ricochets_left = max_ricochets
+        self.dx = 0
+        self.dy = -1  # Commence vers le haut
+        self.image.fill(ORANGE)
+
+    def update(self):
+        self.trail.append(self.rect.center)
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def ricochet(self):
+        """Change la direction du projectile apres avoir touche un ennemi.
+        Retourne True si le projectile peut continuer, False sinon."""
+        if self.ricochets_left <= 0:
+            return False
+
+        # Angle aleatoire dans le demi-cercle superieur (pi a 2*pi)
+        angle = random.uniform(math.pi, 2 * math.pi)
+        self.dx = math.cos(angle)
+        self.dy = math.sin(angle)
+        self.ricochets_left -= 1
+        return True
+
+
 class EnemyProjectile:
     def __init__(self, x, y, dx, dy, speed=7):
         self.image = pygame.Surface((5, 10))

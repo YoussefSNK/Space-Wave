@@ -16,6 +16,8 @@ class PowerUp:
             self.color = (255, 0, 255)
         elif power_type == 'spread':
             self.color = (0, 255, 100)
+        elif power_type == 'ricochet':
+            self.color = (255, 100, 0)
         else:
             self.color = WHITE
 

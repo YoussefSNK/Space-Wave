@@ -8,7 +8,7 @@ from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.enemy import ShootingEnemy
-from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile
+from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile, RicochetProjectile
 from graphics.effects import Explosion
 
 
@@ -170,10 +170,21 @@ class GameScreen(Screen):
                 if projectile.rect.colliderect(enemy.rect):
                     if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)) and enemy.is_dying:
                         continue
-                    try:
-                        self.projectiles.remove(projectile)
-                    except ValueError:
-                        pass
+
+                    # Gerer le ricochet : le projectile rebondit au lieu d'etre detruit
+                    if isinstance(projectile, RicochetProjectile):
+                        can_continue = projectile.ricochet()
+                        if not can_continue:
+                            try:
+                                self.projectiles.remove(projectile)
+                            except ValueError:
+                                pass
+                    else:
+                        try:
+                            self.projectiles.remove(projectile)
+                        except ValueError:
+                            pass
+
                     self.combo.hit()
                     if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
                         enemy.take_damage(1)
@@ -181,7 +192,7 @@ class GameScreen(Screen):
                             enemy.is_dying = True
                     else:
                         if enemy.drops_powerup:
-                            power_types = ['double', 'triple', 'spread']
+                            power_types = ['double', 'triple', 'spread', 'ricochet']
                             chosen_power = random.choice(power_types)
                             powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
                             self.powerups.append(powerup)
