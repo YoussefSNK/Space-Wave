@@ -15,8 +15,8 @@ from graphics.effects import Explosion
 class GameScreen(Screen):
     """Écran de jeu principal."""
 
-    def __init__(self, screen, level_num=1):
-        super().__init__(screen)
+    def __init__(self, screen, scalable_display=None, level_num=1):
+        super().__init__(screen, scalable_display)
         self.level_num = level_num
         self.game_over = False
         self.victory = False

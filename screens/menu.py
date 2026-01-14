@@ -7,8 +7,8 @@ from graphics.background import Background
 class MenuScreen(Screen):
     """Écran d'accueil / menu principal."""
 
-    def __init__(self, screen):
-        super().__init__(screen)
+    def __init__(self, screen, scalable_display=None):
+        super().__init__(screen, scalable_display)
         self.background = Background()
 
         # Titre du jeu

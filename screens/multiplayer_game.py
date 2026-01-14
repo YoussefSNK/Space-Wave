@@ -136,8 +136,8 @@ class SyncedEnemyProjectile:
 class MultiplayerGameScreen(Screen):
     """Écran de jeu en mode multijoueur."""
 
-    def __init__(self, screen, client: GameClient):
-        super().__init__(screen)
+    def __init__(self, screen, scalable_display, client: GameClient):
+        super().__init__(screen, scalable_display)
         self.client = client
         self.background = Background()
 

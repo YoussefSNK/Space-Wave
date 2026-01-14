@@ -56,8 +56,8 @@ class LevelButton(Button):
 class LevelSelectScreen(Screen):
     """Écran de sélection de niveau."""
 
-    def __init__(self, screen):
-        super().__init__(screen)
+    def __init__(self, screen, scalable_display=None):
+        super().__init__(screen, scalable_display)
         self.background = Background()
         self.selected_level = None
 

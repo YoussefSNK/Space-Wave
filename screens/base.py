@@ -5,8 +5,9 @@ from abc import ABC, abstractmethod
 class Screen(ABC):
     """Classe de base pour tous les écrans du jeu."""
 
-    def __init__(self, screen):
+    def __init__(self, screen, scalable_display=None):
         self.screen = screen
+        self.scalable_display = scalable_display
         self.next_screen = None
         self.running = True
 
@@ -34,11 +35,24 @@ class Screen(ABC):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return None
+                # Gérer le redimensionnement de la fenêtre
+                if event.type == pygame.VIDEORESIZE and self.scalable_display:
+                    self.scalable_display.handle_resize(event.w, event.h)
+                # Convertir les coordonnées souris pour les événements
+                if self.scalable_display and event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+                    # Convertir les coordonnées écran en coordonnées jeu
+                    game_x, game_y = self.scalable_display.screen_to_game_coords(*event.pos)
+                    event.pos = (int(game_x), int(game_y))
                 self.handle_event(event)
 
             self.update()
             self.draw()
-            pygame.display.flip()
+
+            # Utiliser le système de scaling si disponible
+            if self.scalable_display:
+                self.scalable_display.render()
+            else:
+                pygame.display.flip()
             clock.tick(FPS)
 
         return self.next_screen

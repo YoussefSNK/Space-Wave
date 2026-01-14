@@ -1,7 +1,7 @@
 import pygame
 import random
 
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, ScalableDisplay
 from systems.level import Level
 from systems.combo import ComboSystem
 from entities.player import Player
@@ -14,8 +14,9 @@ from graphics.effects import Explosion
 
 def run_game():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    display = ScalableDisplay()
     pygame.display.set_caption("Space Wave")
+    screen = display.get_internal_surface()
     clock = pygame.time.Clock()
     running = True
 
@@ -31,6 +32,8 @@ def run_game():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.VIDEORESIZE:
+                display.handle_resize(event.w, event.h)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 player.shoot(projectiles)
 
@@ -310,6 +313,6 @@ def run_game():
 
         combo.draw(screen, font)
 
-        pygame.display.flip()
+        display.render()
         clock.tick(FPS)
     pygame.quit()

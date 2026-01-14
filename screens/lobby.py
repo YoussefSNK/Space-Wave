@@ -86,8 +86,8 @@ class LobbyListItem:
 class LobbyScreen(Screen):
     """Écran de lobby pour rejoindre ou créer une partie."""
 
-    def __init__(self, screen):
-        super().__init__(screen)
+    def __init__(self, screen, scalable_display=None):
+        super().__init__(screen, scalable_display)
         self.background = Background()
         self.client: GameClient = None
 
