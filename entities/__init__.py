@@ -1,4 +1,4 @@
-from .enemy import Enemy, ShootingEnemy
+from .enemy import Enemy, ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
 from .player import Player
 from .powerup import PowerUp
 from .projectiles import (

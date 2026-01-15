@@ -7,7 +7,7 @@ from systems.combo import ComboSystem
 from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
-from entities.enemy import ShootingEnemy
+from entities.enemy import ShootingEnemy, DashEnemy, SplitterEnemy
 from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile, RicochetProjectile
 from graphics.effects import Explosion
 
@@ -136,6 +136,8 @@ class GameScreen(Screen):
                     self.victory = True
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(self.player.rect.center, self.enemy_projectiles)
+            elif isinstance(enemy, DashEnemy):
+                enemy.update_with_player(self.player.rect.center)
 
     def _update_enemy_projectiles(self):
         for e_proj in self.enemy_projectiles:
@@ -191,13 +193,21 @@ class GameScreen(Screen):
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
                     else:
-                        if enemy.drops_powerup:
-                            power_types = ['double', 'triple', 'spread', 'ricochet']
-                            chosen_power = random.choice(power_types)
-                            powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
-                            self.powerups.append(powerup)
-                        self.level.enemies.remove(enemy)
-                    self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
+                        enemy.hp -= 1
+                        if enemy.hp <= 0:
+                            if enemy.drops_powerup:
+                                power_types = ['double', 'triple', 'spread', 'ricochet']
+                                chosen_power = random.choice(power_types)
+                                powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
+                                self.powerups.append(powerup)
+                            # Gérer la division du SplitterEnemy
+                            if isinstance(enemy, SplitterEnemy):
+                                mini_enemies = enemy.split()
+                                self.level.enemies.extend(mini_enemies)
+                            self.level.enemies.remove(enemy)
+                            self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
+                        else:
+                            self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery, duration=150))
                     break
 
     def _check_enemy_projectile_collisions(self):
@@ -255,6 +265,10 @@ class GameScreen(Screen):
                             chosen_power = random.choice(power_types)
                             powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
                             self.powerups.append(powerup)
+                        # Gérer la division du SplitterEnemy
+                        if isinstance(enemy, SplitterEnemy):
+                            mini_enemies = enemy.split()
+                            self.level.enemies.extend(mini_enemies)
                         self.level.enemies.remove(enemy)
                     if self.player.hp <= 0:
                         self.game_over = True
