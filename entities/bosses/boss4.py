@@ -169,7 +169,7 @@ class Boss4(Enemy):
                 self.rect.x += shake
             elif self.charge_timer <= self.charge_warning_duration + 30:
                 self.rect.y += 15
-            elif self.charge_timer <= self.charge_duration:
+            else:
                 if self.rect.centery > self.original_y:
                     self.rect.y -= 5
                 else:
