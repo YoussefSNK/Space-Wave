@@ -153,18 +153,29 @@ class Background:
         return surface
 
     def _generate_initial_planets(self):
-        """Génère les planètes initiales réparties sur tout l'écran."""
-        for _ in range(random.randint(3, 6)):
+        """Génère une planète initiale (maximum 1 à l'écran)."""
+        # 50% de chance d'avoir une planète au démarrage
+        if random.random() < 0.5:
             x = random.randint(50, SCREEN_WIDTH - 50)
-            y = random.randint(-SCREEN_HEIGHT, SCREEN_HEIGHT)  # Réparties sur tout l'écran
+            y = random.randint(-SCREEN_HEIGHT // 2, SCREEN_HEIGHT // 2)
             radius = random.randint(20, 50)
-            base_color = random.choice(self.planet_colors)
+
+            # Choisir un type de planète
+            planet_type = random.choice(['standard', 'jupiter'])
+
+            if planet_type == 'standard':
+                base_color = random.choice(self.planet_colors)
+            else:
+                base_color = None  # Pas utilisé pour les planètes spéciales
 
             # La vitesse dépend de la taille: plus c'est gros, plus c'est lent (effet de profondeur)
             speed_factor = 0.5 - (radius / 50) * 0.35
 
             # Créer la surface de la planète
-            planet_surface = self._create_planet_surface(radius, base_color)
+            if planet_type == 'standard':
+                planet_surface = self._create_planet_surface(radius, base_color)
+            elif planet_type == 'jupiter':
+                planet_surface = self._create_jupiter_planet(radius)
 
             # Stocker les propriétés de la planète
             self.planets.append({
@@ -180,13 +191,23 @@ class Background:
         x = random.randint(50, SCREEN_WIDTH - 50)
         y = random.randint(-200, -50)  # Commence au-dessus de l'écran
         radius = random.randint(20, 50)
-        base_color = random.choice(self.planet_colors)
+
+        # Choisir un type de planète
+        planet_type = random.choice(['standard', 'jupiter'])
+
+        if planet_type == 'standard':
+            base_color = random.choice(self.planet_colors)
+        else:
+            base_color = None  # Pas utilisé pour les planètes spéciales
 
         # La vitesse dépend de la taille
         speed_factor = 0.5 - (radius / 50) * 0.35
 
         # Créer la surface de la planète
-        planet_surface = self._create_planet_surface(radius, base_color)
+        if planet_type == 'standard':
+            planet_surface = self._create_planet_surface(radius, base_color)
+        elif planet_type == 'jupiter':
+            planet_surface = self._create_jupiter_planet(radius)
 
         # Ajouter la nouvelle planète
         self.planets.append({
@@ -197,43 +218,313 @@ class Background:
             'radius': radius
         })
 
+    def _create_jupiter_planet(self, radius):
+        """Crée une planète de type Jupiter avec bandes atmosphériques et Grande Tache Rouge."""
+        size = radius * 2 + 4
+        planet_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+        cx, cy = radius + 2, radius + 2
+
+        # Générer des textures de bruit pour les turbulences
+        shape = (size, size)
+        seed = random.randint(0, 10000)
+
+        # Bruit pour les turbulences atmosphériques
+        turbulence_noise = generate_perlin_noise_2d(shape, scale=0.2, octaves=4, persistence=0.6, seed=seed, tileable_y=False)
+        detail_noise = generate_perlin_noise_2d(shape, scale=0.4, octaves=3, persistence=0.5, seed=seed+1, tileable_y=False)
+
+        # Palette de couleurs pour Jupiter
+        # Couleurs claires pour les bandes
+        light_colors = [
+            (242, 232, 216),  # #f2e8d8
+            (230, 220, 200),  # #e6dcc8
+        ]
+        # Couleurs foncées pour les bandes
+        dark_colors = [
+            (196, 154, 108),  # #c49a6c
+            (158, 107, 63),   # #9e6b3f
+        ]
+
+        # Configuration de la Grande Tache Rouge
+        gtr_angle = random.uniform(0.3, 0.6) * np.pi  # Position angulaire (légèrement sous l'équateur)
+        gtr_distance = radius * 0.5  # Distance du centre
+        gtr_x = cx + gtr_distance * np.cos(gtr_angle)
+        gtr_y = cy + gtr_distance * np.sin(gtr_angle)
+        gtr_width = radius * 0.4
+        gtr_height = radius * 0.25
+
+        # Générer les bandes - nombre variable selon la taille de la planète
+        num_bands = random.randint(8, 12)
+        band_data = []
+
+        for i in range(num_bands):
+            # Alterner clair/foncé
+            is_light = i % 2 == 0
+            # Position verticale relative (-1 à 1, 0 = équateur)
+            y_pos = -1 + (i / (num_bands - 1)) * 2
+            # Largeur variable de la bande
+            band_width = random.uniform(0.15, 0.3)
+
+            if is_light:
+                color = random.choice(light_colors)
+            else:
+                color = random.choice(dark_colors)
+
+            band_data.append({
+                'y_pos': y_pos,
+                'width': band_width,
+                'color': color,
+                'is_light': is_light
+            })
+
+        # Dessiner la planète pixel par pixel
+        for y in range(size):
+            for x in range(size):
+                dx = x - cx
+                dy = y - cy
+                dist = np.sqrt(dx*dx + dy*dy)
+
+                if dist > radius:
+                    continue
+
+                ratio = dist / radius
+
+                # Calculer la position 3D sur la sphère
+                if ratio < 1:
+                    z = np.sqrt(max(0, 1 - ratio * ratio))
+
+                    # Vecteur normal
+                    nx = dx / radius
+                    ny = dy / radius
+                    nz = z
+
+                    # Lumière venant du haut-gauche-devant
+                    lx, ly, lz = -0.5, -0.5, 1.0
+                    l_norm = np.sqrt(lx*lx + ly*ly + lz*lz)
+                    lx, ly, lz = lx/l_norm, ly/l_norm, lz/l_norm
+
+                    # Intensité lumineuse
+                    light_intensity = max(0, nx*lx + ny*ly + nz*lz)
+                    light_intensity = 0.4 + light_intensity * 0.6
+
+                    # Dégradé radial (centre plus clair, bords plus sombres)
+                    radial_gradient = 1.0 - (ratio ** 1.5) * 0.3
+
+                    # Déterminer la couleur de base selon la position Y (bandes horizontales)
+                    # Position normalisée en Y sur la sphère (-1 à 1)
+                    y_sphere = ny
+
+                    # Trouver la bande correspondante
+                    base_color = dark_colors[0]  # Couleur par défaut
+                    for band in band_data:
+                        band_start = band['y_pos'] - band['width'] / 2
+                        band_end = band['y_pos'] + band['width'] / 2
+
+                        if band_start <= y_sphere <= band_end:
+                            base_color = band['color']
+                            break
+
+                    # Ajouter les turbulences
+                    turbulence_val = turbulence_noise[y, x] * 0.15
+                    detail_val = detail_noise[y, x] * 0.08
+
+                    # Ondulations horizontales (casser la régularité des bandes)
+                    wave_offset = np.sin(y_sphere * 10 + turbulence_noise[y, x] * 3) * 0.02
+
+                    # Facteur de texture combiné
+                    texture_factor = 1.0 + turbulence_val + detail_val + wave_offset
+
+                    # Calculer la couleur finale
+                    r = int(base_color[0] * texture_factor * light_intensity * radial_gradient)
+                    g = int(base_color[1] * texture_factor * light_intensity * radial_gradient)
+                    b = int(base_color[2] * texture_factor * light_intensity * radial_gradient)
+
+                    # Vérifier si on est dans la Grande Tache Rouge
+                    dx_gtr = x - gtr_x
+                    dy_gtr = y - gtr_y
+                    gtr_dist = np.sqrt((dx_gtr / gtr_width)**2 + (dy_gtr / gtr_height)**2)
+
+                    if gtr_dist < 1.0:
+                        # Couleur de la Grande Tache Rouge
+                        gtr_color = (193, 68, 46)  # #c1442e
+
+                        # Intensité de la tache (plus fort au centre)
+                        gtr_intensity = 1.0 - gtr_dist
+                        gtr_intensity = gtr_intensity ** 0.7  # Adoucir les bords
+
+                        # Centre plus clair
+                        if gtr_dist < 0.3:
+                            lightness = 1.3
+                        else:
+                            lightness = 1.0
+
+                        # Effet de rotation (spirale subtile)
+                        angle = np.arctan2(dy_gtr, dx_gtr)
+                        spiral_val = np.sin(angle * 3 + gtr_dist * 5) * 0.1
+
+                        # Mélanger avec la couleur de base
+                        gtr_r = int(gtr_color[0] * lightness * light_intensity * radial_gradient * (1 + spiral_val))
+                        gtr_g = int(gtr_color[1] * lightness * light_intensity * radial_gradient * (1 + spiral_val))
+                        gtr_b = int(gtr_color[2] * lightness * light_intensity * radial_gradient * (1 + spiral_val))
+
+                        # Interpolation entre la bande et la tache rouge
+                        r = int(r * (1 - gtr_intensity) + gtr_r * gtr_intensity)
+                        g = int(g * (1 - gtr_intensity) + gtr_g * gtr_intensity)
+                        b = int(b * (1 - gtr_intensity) + gtr_b * gtr_intensity)
+
+                    # Limiter les valeurs
+                    r = max(0, min(255, r))
+                    g = max(0, min(255, g))
+                    b = max(0, min(255, b))
+
+                    # Alpha fade aux bords pour anti-aliasing
+                    if ratio > 0.95:
+                        alpha = int(255 * (1 - ratio) / 0.05)
+                    else:
+                        alpha = 255
+
+                    planet_surface.set_at((x, y), (r, g, b, alpha))
+
+        # Ajouter un voile atmosphérique léger (translucide blanc)
+        atmosphere_layer = pygame.Surface((size, size), pygame.SRCALPHA)
+        for y in range(size):
+            for x in range(size):
+                dx = x - cx
+                dy = y - cy
+                dist = np.sqrt(dx*dx + dy*dy)
+
+                if dist <= radius:
+                    ratio = dist / radius
+                    # Voile très subtil, plus visible aux bords
+                    atmosphere_alpha = int(15 * (ratio ** 2))
+                    atmosphere_layer.set_at((x, y), (255, 255, 255, atmosphere_alpha))
+
+        planet_surface.blit(atmosphere_layer, (0, 0))
+
+        # Ajouter un halo atmosphérique fin sur le bord externe
+        for y in range(size):
+            for x in range(size):
+                dx = x - cx
+                dy = y - cy
+                dist = np.sqrt(dx*dx + dy*dy)
+
+                # Halo juste à l'extérieur de la planète
+                if radius < dist <= radius + 3:
+                    halo_intensity = 1.0 - (dist - radius) / 3
+                    halo_alpha = int(40 * halo_intensity)
+                    current = planet_surface.get_at((x, y))
+
+                    r = min(255, current[0] + 20)
+                    g = min(255, current[1] + 15)
+                    b = min(255, current[2] + 10)
+                    alpha = max(current[3], halo_alpha)
+
+                    planet_surface.set_at((x, y), (r, g, b, alpha))
+
+        return planet_surface
+
     def _create_planet_surface(self, radius, base_color):
-        """Crée une surface de planète avec un effet de sphère 3D."""
-        # Créer une surface temporaire pour la planète
-        planet_surface = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
-        cx, cy = radius + 2, radius + 2  # Centre de la surface
+        """Crée une surface de planète avec texture Perlin et éclairage 3D."""
+        size = radius * 2 + 4
+        planet_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+        cx, cy = radius + 2, radius + 2
 
-        # Dessiner des cercles concentriques pour créer un dégradé radial
-        for i in range(radius, 0, -1):
-            # Ratio de distance du centre (0 au centre, 1 au bord)
-            ratio = i / radius
+        # Générer texture de bruit Perlin pour la planète
+        shape = (size, size)
+        seed = random.randint(0, 10000)
 
-            # Décalage pour simuler la lumière venant du haut-gauche
-            light_offset_x = (1 - ratio) * radius * 0.3
-            light_offset_y = (1 - ratio) * radius * 0.3
+        # Texture principale (cratères, terrain)
+        noise = generate_perlin_noise_2d(shape, scale=0.15, octaves=4, persistence=0.6, seed=seed, tileable_y=False)
 
-            # Interpoler la couleur: plus clair au centre-haut-gauche, plus sombre au bord
-            # La partie éclairée est plus claire
-            light_factor = 1.3 - ratio * 0.8  # De 1.3 (centre) à 0.5 (bord)
-            color = tuple(
-                max(0, min(255, int(c * light_factor)))
-                for c in base_color
-            )
+        # Texture de détails fins
+        noise_detail = generate_perlin_noise_2d(shape, scale=0.3, octaves=3, persistence=0.5, seed=seed+1, tileable_y=False)
 
-            pygame.draw.circle(planet_surface, color,
-                             (int(cx - light_offset_x), int(cy - light_offset_y)), i)
+        # Créer un masque circulaire et calculer l'éclairage
+        for y in range(size):
+            for x in range(size):
+                # Distance du centre
+                dx = x - cx
+                dy = y - cy
+                dist = np.sqrt(dx*dx + dy*dy)
 
-        # Ajouter un reflet brillant (petite tache lumineuse)
-        highlight_x = cx - radius * 0.4
-        highlight_y = cy - radius * 0.4
-        highlight_radius = max(2, radius // 5)
-        highlight_color = tuple(min(c + 80, 255) for c in base_color)
-        pygame.draw.circle(planet_surface, highlight_color,
-                         (int(highlight_x), int(highlight_y)), highlight_radius)
+                # Si hors du cercle, pixel transparent
+                if dist > radius:
+                    continue
 
-        # Ajouter un contour subtil pour définir le bord
-        edge_color = tuple(max(0, c - 40) for c in base_color)
-        pygame.draw.circle(planet_surface, edge_color, (cx, cy), radius, 1)
+                # Ratio de distance (0 au centre, 1 au bord)
+                ratio = dist / radius
+
+                # Éclairage sphérique (lumière vient du haut-gauche)
+                # Calculer la normale de la sphère
+                if ratio < 1:
+                    z = np.sqrt(max(0, 1 - ratio * ratio))  # Hauteur sur la sphère
+
+                    # Vecteur normal normalisé
+                    nx = dx / radius
+                    ny = dy / radius
+                    nz = z
+
+                    # Vecteur lumière (vient du haut-gauche-devant)
+                    lx, ly, lz = -0.5, -0.5, 1.0
+                    l_norm = np.sqrt(lx*lx + ly*ly + lz*lz)
+                    lx, ly, lz = lx/l_norm, ly/l_norm, lz/l_norm
+
+                    # Produit scalaire = intensité lumineuse
+                    light_intensity = max(0, nx*lx + ny*ly + nz*lz)
+                    light_intensity = 0.3 + light_intensity * 0.7  # Lumière ambiante + diffuse
+
+                    # Assombrir les bords (ambient occlusion)
+                    edge_darkening = 1 - (ratio ** 2) * 0.4
+                    light_intensity *= edge_darkening
+                else:
+                    light_intensity = 0.3
+
+                # Texture Perlin pour variation de surface
+                terrain_val = (noise[y, x] + 1) / 2  # 0 à 1
+                detail_val = (noise_detail[y, x] + 1) / 2
+
+                # Combiner texture et couleur de base
+                texture_factor = 0.7 + terrain_val * 0.3 + detail_val * 0.1
+
+                # Calculer couleur finale
+                r = int(base_color[0] * texture_factor * light_intensity)
+                g = int(base_color[1] * texture_factor * light_intensity)
+                b = int(base_color[2] * texture_factor * light_intensity)
+
+                # Limiter
+                r = max(0, min(255, r))
+                g = max(0, min(255, g))
+                b = max(0, min(255, b))
+
+                # Alpha fade aux bords pour anti-aliasing
+                if ratio > 0.95:
+                    alpha = int(255 * (1 - ratio) / 0.05)
+                else:
+                    alpha = 255
+
+                planet_surface.set_at((x, y), (r, g, b, alpha))
+
+        # Ajouter un reflet brillant (spéculaire)
+        highlight_x = int(cx - radius * 0.35)
+        highlight_y = int(cy - radius * 0.35)
+        highlight_radius = max(2, radius // 6)
+
+        for y in range(max(0, highlight_y - highlight_radius), min(size, highlight_y + highlight_radius + 1)):
+            for x in range(max(0, highlight_x - highlight_radius), min(size, highlight_x + highlight_radius + 1)):
+                dx = x - highlight_x
+                dy = y - highlight_y
+                dist = np.sqrt(dx*dx + dy*dy)
+
+                if dist < highlight_radius:
+                    # Dégradé gaussien pour le reflet
+                    intensity = np.exp(-(dist**2) / (highlight_radius**2 / 2))
+                    current = planet_surface.get_at((x, y))
+
+                    # Ajouter du blanc pour le reflet
+                    r = min(255, int(current[0] + 100 * intensity))
+                    g = min(255, int(current[1] + 100 * intensity))
+                    b = min(255, int(current[2] + 100 * intensity))
+
+                    planet_surface.set_at((x, y), (r, g, b, current[3]))
 
         return planet_surface
 
@@ -260,8 +551,8 @@ class Background:
         for i in reversed(planets_to_remove):
             self.planets.pop(i)
 
-        # Générer aléatoirement de nouvelles planètes (environ 1% de chance par frame)
-        if self.stars_layer and random.random() < 0.01 and len(self.planets) < 8:
+        # Générer aléatoirement une nouvelle planète seulement s'il n'y en a aucune (maximum 1)
+        if self.stars_layer and len(self.planets) == 0 and random.random() < 0.005:
             self._spawn_new_planet()
 
     def draw(self, surface):
