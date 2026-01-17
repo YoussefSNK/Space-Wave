@@ -256,6 +256,7 @@ class Boss5(Enemy):
                     self.last_shot_frame = self.timer
                     num_patterns = 8 if self.rage_mode else 6
                     pattern_index = (self.timer // self.pattern_switch_interval) % num_patterns
+                    self.current_pattern = pattern_index
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
 

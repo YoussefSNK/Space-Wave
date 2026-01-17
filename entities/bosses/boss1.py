@@ -136,6 +136,7 @@ class Boss(Enemy):
                 if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
                     self.last_shot_frame = self.timer
                     pattern_index = (self.timer // self.pattern_switch_interval) % 4
+                    self.current_pattern = pattern_index
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
 

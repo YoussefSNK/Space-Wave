@@ -454,7 +454,10 @@ def run_test(entity_type):
 
                 # Afficher le pattern actuel
                 pattern_name = get_pattern_name(enemy)
-                pattern_num = enemy.pattern if isinstance(enemy, Boss6) else enemy.current_pattern
+                if isinstance(enemy, Boss6):
+                    pattern_num = enemy.pattern
+                else:
+                    pattern_num = getattr(enemy, 'current_pattern', 0)
                 pattern_text = font.render(f"Pattern: {pattern_num} - {pattern_name}", True, (100, 200, 255))
                 screen.blit(pattern_text, (10, 130))
 
