@@ -156,10 +156,15 @@ class Boss2(Enemy):
             print("Boss 2: Tir spiral!")
 
         elif pattern_index == 1:
-            for i in range(5):
-                offset_x = (i - 2) * 40
-                projectiles.append(Boss2Projectile(bx + offset_x, by, 0, 1, speed=8))
-            print("Boss 2: Pluie de feu!")
+            # Pattern en V - les tirs descendent en diagonale depuis les côtés
+            # Laisse un gap au centre et sur les côtés pour esquiver
+            angles = [-45, -25, 25, 45]  # Angles en degrés (pas de tir central)
+            for angle_deg in angles:
+                angle_rad = math.radians(angle_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)  # cos pour que l'angle 0 soit vers le bas
+                projectiles.append(Boss2Projectile(bx, by, dx, dy, speed=6))
+            print("Boss 2: Pluie de feu en V!")
 
         elif pattern_index == 2:
             for angle_deg in [-60, -40, -20]:
