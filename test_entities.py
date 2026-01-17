@@ -246,7 +246,15 @@ def run_test(entity_type):
 
         # Updates
         background.update()
+
+        # Gérer les déplacements clavier
+        keys = pygame.key.get_pressed()
+        player.handle_input(keys)
         player.update()
+
+        # Tir automatique si espace est maintenu
+        if keys[pygame.K_SPACE]:
+            player.shoot(projectiles)
 
         for projectile in projectiles:
             projectile.update()
