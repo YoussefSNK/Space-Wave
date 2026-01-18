@@ -220,9 +220,11 @@ class HomingProjectile(EnemyProjectile):
         self.image.fill((255, 100, 100))
         self.rect = self.image.get_rect(center=(x, y))
         self.max_trail_length = 15
-        self.lifetime = 180
+        self.homing_duration = 180
         self.timer = 0
         self.turn_speed = 0.05
+        self.launched = False
+        self.super_speed = 15
 
         self.trail_cache = []
         for i in range(self.max_trail_length):
@@ -241,7 +243,7 @@ class HomingProjectile(EnemyProjectile):
             self.trail.pop(0)
 
         # Poursuite du joueur
-        if player_position and self.timer < self.lifetime:
+        if player_position and self.timer < self.homing_duration:
             px, py = player_position
             target_dx = px - self.rect.centerx
             target_dy = py - self.rect.centery
@@ -255,12 +257,24 @@ class HomingProjectile(EnemyProjectile):
                 if d > 0:
                     self.dx /= d
                     self.dy /= d
-
-        self.rect.x += int(self.dx * self.speed)
-        self.rect.y += int(self.dy * self.speed)
+            self.rect.x += int(self.dx * self.speed)
+            self.rect.y += int(self.dy * self.speed)
+        else:
+            # Apres la phase de guidage, fonce tout droit a supervitesse
+            if not self.launched:
+                self.launched = True
+                # Normaliser la direction actuelle
+                d = math.sqrt(self.dx**2 + self.dy**2)
+                if d > 0:
+                    self.dx /= d
+                    self.dy /= d
+            self.rect.x += int(self.dx * self.super_speed)
+            self.rect.y += int(self.dy * self.super_speed)
 
     def is_expired(self):
-        return self.timer >= self.lifetime
+        # Le missile expire seulement quand il sort de l'ecran
+        return (self.rect.right < 0 or self.rect.left > SCREEN_WIDTH or
+                self.rect.bottom < 0 or self.rect.top > SCREEN_HEIGHT)
 
     def draw(self, surface):
         for i, pos in enumerate(self.trail):
