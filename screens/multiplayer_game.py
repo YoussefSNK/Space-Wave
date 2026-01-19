@@ -144,6 +144,9 @@ class MultiplayerGameScreen(Screen):
         self.game_over = False
         self.victory = False
         self.paused = False
+        self.player_crashing = False
+        self.fade_timer = 0
+        self.fade_duration = 240  # 4 secondes à 60 FPS
 
         # Cache des entités locales (pour le rendu)
         self.players = {}  # player_id -> Player
@@ -193,6 +196,11 @@ class MultiplayerGameScreen(Screen):
 
         if self.client.game_over:
             self.game_over = True
+            if not self.player_crashing:
+                self.player_crashing = True
+                self.fade_timer = 0
+            if self.player_crashing and self.fade_timer < self.fade_duration:
+                self.fade_timer += 1
             return
         if self.client.victory:
             self.victory = True
@@ -224,6 +232,18 @@ class MultiplayerGameScreen(Screen):
         self._sync_projectiles()
         self._sync_powerups()
         self._sync_explosions()
+
+        # Vérifier si tous les joueurs sont morts pour commencer le fondu
+        if not self.player_crashing and not self.game_over:
+            all_players_dead = all(p.hp <= 0 for p in self.players.values())
+            if all_players_dead and len(self.players) > 0:
+                self.player_crashing = True
+                self.fade_timer = 0
+                print("[DEBUG] Tous les joueurs sont morts, début du fondu")
+
+        # Incrémenter le fade_timer si le fondu est actif (même avant le game_over officiel)
+        if self.player_crashing and self.fade_timer < self.fade_duration:
+            self.fade_timer += 1
 
         # Mettre à jour les explosions locales
         for exp in self.explosions:
@@ -672,7 +692,17 @@ class MultiplayerGameScreen(Screen):
         # UI
         self._draw_ui()
 
-        if self.game_over:
+        # Fondu au noir progressif pendant le crash (4 secondes) et reste noir après
+        if self.fade_timer > 0:
+            progress = min(1.0, self.fade_timer / self.fade_duration)
+            fade_alpha = int(255 * progress)
+            fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            fade_surface.fill((0, 0, 0, fade_alpha))
+            self.screen.blit(fade_surface, (0, 0))
+
+        # Écrans de fin (afficher GAME OVER même pendant le crash)
+        if self.player_crashing or self.game_over:
+            print(f"[DEBUG DRAW] Affichage game over - player_crashing={self.player_crashing}, game_over={self.game_over}, fade_timer={self.fade_timer}")
             self._draw_game_over()
         elif self.victory:
             self._draw_victory()

@@ -346,7 +346,10 @@ class GameServer:
             if sp.player:
                 if sp.player.is_crashing:
                     # Mettre à jour l'animation de crash
-                    sp.player.update()
+                    crash_finished = sp.player.update()
+                    if crash_finished:
+                        sp.player.is_crashing = False
+                        print(f"[DEBUG] Player {sp.player_id} a fini son animation de crash")
                 elif sp.player.hp > 0:
                     # Logique normale
                     sp.player.dx = sp.dx
@@ -602,13 +605,16 @@ class GameServer:
 
     def _check_game_over(self, lobby: GameLobby) -> bool:
         """Vérifie si tous les joueurs sont morts ET ont terminé leur animation de crash."""
+        all_dead = True
         for sp in lobby.players.values():
             if sp.player is None:
                 continue
             # Le joueur est considéré "vivant" s'il a des HP ou si son crash n'est pas terminé
             if sp.player.hp > 0 or sp.player.is_crashing:
-                return False
-        return True
+                all_dead = False
+        if all_dead:
+            print(f"[DEBUG CHECK] Tous les joueurs sont morts et ont fini de crasher -> GAME OVER")
+        return all_dead
 
     def _check_victory(self, lobby: GameLobby) -> bool:
         """Vérifie si le Boss 6 est vaincu."""
