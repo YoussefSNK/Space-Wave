@@ -251,6 +251,17 @@ class MultiplayerGameScreen(Screen):
             player.power_type = p_data.get("power_type", "normal")
             player.invulnerable = p_data.get("invulnerable", False)
 
+            # Synchroniser l'état de crash
+            is_crashing = p_data.get("is_crashing", False)
+            if is_crashing and not player.is_crashing:
+                # Démarrer l'animation de crash localement
+                player.start_crash()
+            player.is_crashing = is_crashing
+
+            if player.is_crashing:
+                player.crash_timer = p_data.get("crash_timer", 0)
+                player.crash_rotation = p_data.get("crash_rotation", 0)
+
             # particules du thruster
             player.thruster_timer += 1
             if player.thruster_timer % 2 == 0:
@@ -649,9 +660,9 @@ class MultiplayerGameScreen(Screen):
         for proj in self.enemy_projectiles.values():
             proj.draw(self.screen)
 
-        # Dessiner les joueurs
+        # Dessiner les joueurs (même ceux en crash avec HP=0)
         for player in self.players.values():
-            if player.hp > 0:
+            if player.hp > 0 or player.is_crashing:
                 player.draw(self.screen)
 
         # Dessiner les explosions

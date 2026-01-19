@@ -54,7 +54,10 @@ class ServerPlayer:
             "hp": self.player.hp if self.player else 0,
             "power_type": self.player.power_type if self.player else "normal",
             "invulnerable": self.player.invulnerable if self.player else False,
-            "ready": self.ready
+            "ready": self.ready,
+            "is_crashing": self.player.is_crashing if self.player else False,
+            "crash_timer": self.player.crash_timer if (self.player and self.player.is_crashing) else 0,
+            "crash_rotation": self.player.crash_rotation if (self.player and self.player.is_crashing) else 0,
         }
 
 
@@ -340,13 +343,18 @@ class GameServer:
         """Met à jour la logique du jeu pour un lobby."""
         # Mettre à jour les joueurs
         for sp in lobby.players.values():
-            if sp.player and sp.player.hp > 0:
-                sp.player.dx = sp.dx
-                sp.player.dy = sp.dy
-                sp.player.update()
+            if sp.player:
+                if sp.player.is_crashing:
+                    # Mettre à jour l'animation de crash
+                    sp.player.update()
+                elif sp.player.hp > 0:
+                    # Logique normale
+                    sp.player.dx = sp.dx
+                    sp.player.dy = sp.dy
+                    sp.player.update()
 
-                if sp.shoot:
-                    sp.player.shoot(lobby.projectiles)
+                    if sp.shoot:
+                        sp.player.shoot(lobby.projectiles)
 
         # Mettre à jour le niveau
         lobby.level.update()
@@ -537,8 +545,11 @@ class GameServer:
 
                 if hit:
                     sp.player.hp -= 1
-                    sp.player.invulnerable = True
-                    sp.player.invuln_start = pygame.time.get_ticks()
+                    if sp.player.hp <= 0 and not sp.player.is_crashing:
+                        sp.player.start_crash()
+                    else:
+                        sp.player.invulnerable = True
+                        sp.player.invuln_start = pygame.time.get_ticks()
                     break
 
         # Ennemis vs joueurs
@@ -552,8 +563,11 @@ class GameServer:
                 if enemy.rect.colliderect(sp.player.rect):
                     damage = 3 if isinstance(enemy, Boss4) and enemy.charging else 1
                     sp.player.hp -= damage
-                    sp.player.invulnerable = True
-                    sp.player.invuln_start = pygame.time.get_ticks()
+                    if sp.player.hp <= 0 and not sp.player.is_crashing:
+                        sp.player.start_crash()
+                    else:
+                        sp.player.invulnerable = True
+                        sp.player.invuln_start = pygame.time.get_ticks()
 
                     # Explosion de contact
                     lobby.explosions.append({
@@ -580,15 +594,21 @@ class GameServer:
                     if sp.player and not sp.player.invulnerable and sp.player.hp > 0:
                         if sp.player.rect.colliderect(laser_rect):
                             sp.player.hp -= 2
-                            sp.player.invulnerable = True
-                            sp.player.invuln_start = pygame.time.get_ticks()
+                            if sp.player.hp <= 0 and not sp.player.is_crashing:
+                                sp.player.start_crash()
+                            else:
+                                sp.player.invulnerable = True
+                                sp.player.invuln_start = pygame.time.get_ticks()
 
     def _check_game_over(self, lobby: GameLobby) -> bool:
-        """Vérifie si tous les joueurs sont morts."""
-        return all(
-            sp.player is None or sp.player.hp <= 0
-            for sp in lobby.players.values()
-        )
+        """Vérifie si tous les joueurs sont morts ET ont terminé leur animation de crash."""
+        for sp in lobby.players.values():
+            if sp.player is None:
+                continue
+            # Le joueur est considéré "vivant" s'il a des HP ou si son crash n'est pas terminé
+            if sp.player.hp > 0 or sp.player.is_crashing:
+                return False
+        return True
 
     def _check_victory(self, lobby: GameLobby) -> bool:
         """Vérifie si le Boss 6 est vaincu."""

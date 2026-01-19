@@ -47,6 +47,17 @@ class Player:
         self.thruster_particles = []
         self.thruster_timer = 0
 
+        # État de crash
+        self.is_crashing = False
+        self.crash_timer = 0
+        self.crash_duration = 180  # 3 secondes à 60 FPS
+        self.crash_fall_direction = 1
+        self.crash_rotation = 0
+        self.crash_rotation_speed = 5
+        self.crash_explosions = []
+        self.crash_explosion_timer = 0
+        self.crash_original_image = None
+
         # Contrôles clavier
         self.speed = 7
         self.dx = 0
@@ -60,6 +71,19 @@ class Player:
         tint_surface.fill((*tint_color, 100))
         tinted.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
         return tinted
+
+    def start_crash(self):
+        """Démarre l'animation de crash du vaisseau."""
+        if self.is_crashing:
+            return
+        self.is_crashing = True
+        self.crash_timer = 0
+        self.crash_fall_direction = random.choice([-1, 1])
+        self.crash_rotation = 0
+        self.crash_rotation_speed = 5
+        self.crash_explosions = []
+        self.crash_explosion_timer = 0
+        self.crash_original_image = self.image.copy() if not self.headless and self.image else None
 
     def handle_input(self, keys):
         """Gère les inputs clavier (ZQSD + Espace)."""
@@ -89,6 +113,10 @@ class Player:
         self.wants_to_shoot = shoot
 
     def update(self):
+        # Si en crash, exécuter l'animation de crash au lieu de la logique normale
+        if self.is_crashing:
+            return self._update_crash_animation()
+
         # Appliquer le mouvement
         self.rect.x += self.dx * self.speed
         self.rect.y += self.dy * self.speed
@@ -134,6 +162,103 @@ class Player:
         # Supprimer les particules mortes
         self.thruster_particles = [p for p in self.thruster_particles if p['life'] > 0]
 
+    def _update_crash_animation(self):
+        """Met à jour l'animation de crash du vaisseau."""
+        from graphics.effects import Explosion
+
+        self.crash_timer += 1
+        progress = self.crash_timer / self.crash_duration
+
+        # 1. Mouvement de chute avec dérive latérale
+        fall_speed_x = 3 * self.crash_fall_direction
+        fall_speed_y = 2 + (progress * 3)  # Accélère vers le bas
+        self.rect.x += fall_speed_x
+        self.rect.y += fall_speed_y
+
+        # 2. Tremblement
+        shake_x = random.uniform(-3, 3) * (1 - progress * 0.5)
+        shake_y = random.uniform(-2, 2) * (1 - progress * 0.5)
+        self.rect.x += shake_x
+        self.rect.y += shake_y
+
+        # 3. Rotation progressive (tourbillon)
+        self.crash_rotation_speed += 0.1  # Accélère
+        self.crash_rotation += self.crash_rotation_speed
+
+        # Appliquer la rotation à l'image (seulement si pas headless)
+        if not self.headless and self.crash_original_image:
+            self.image = pygame.transform.rotate(self.crash_original_image, self.crash_rotation)
+            old_center = self.rect.center
+            self.rect = self.image.get_rect()
+            self.rect.center = old_center
+
+        # 4. Clignotement (alternance sprite normal/endommagé)
+        if (self.crash_timer // 8) % 2 == 0 and not self.headless and self.crash_original_image:
+            # Appliquer une teinte rouge pour l'effet endommagé
+            tinted = self.crash_original_image.copy()
+            tint_surf = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+            tint_surf.fill((255, 50, 50, 150))
+            tinted.blit(tint_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            self.image = pygame.transform.rotate(tinted, self.crash_rotation)
+            old_center = self.rect.center
+            self.rect = self.image.get_rect()
+            self.rect.center = old_center
+
+        # 5. Explosions en cascade
+        explosion_interval = int(15 - (progress * 10))  # De 15 à 5 frames
+        explosion_interval = max(5, explosion_interval)
+
+        self.crash_explosion_timer += 1
+        if self.crash_explosion_timer >= explosion_interval:
+            self.crash_explosion_timer = 0
+            # Créer une explosion à une position aléatoire sur le vaisseau
+            offset_x = random.randint(-20, 20)
+            offset_y = random.randint(-20, 20)
+            exp = Explosion(
+                self.rect.centerx + offset_x,
+                self.rect.centery + offset_y,
+                duration=300
+            )
+            self.crash_explosions.append(exp)
+
+        # Mettre à jour les explosions existantes
+        for exp in self.crash_explosions:
+            exp.update()
+        self.crash_explosions = [exp for exp in self.crash_explosions if not exp.is_finished()]
+
+        # 6. Éteindre progressivement les particules de thruster
+        if progress < 0.3:  # Thruster actif pendant 30% de l'animation
+            # Continuer les particules normalement
+            self.thruster_timer += 1
+            if self.thruster_timer % 2 == 0:
+                base_x = self.rect.centerx
+                base_y = self.rect.bottom - 5
+                for _ in range(2):
+                    particle = {
+                        'x': base_x + random.uniform(-8, 8),
+                        'y': base_y,
+                        'vx': random.uniform(-0.5, 0.5),
+                        'vy': random.uniform(2, 4),
+                        'life': random.randint(10, 20),
+                        'max_life': 20,
+                        'size': random.uniform(3, 6),
+                    }
+                    self.thruster_particles.append(particle)
+
+        # Mettre à jour les particules existantes
+        for p in self.thruster_particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['life'] -= 1
+            p['size'] = max(0, p['size'] - 0.2)
+        self.thruster_particles = [p for p in self.thruster_particles if p['life'] > 0]
+
+        # 7. Vérifier si l'animation est terminée
+        if self.crash_timer >= self.crash_duration:
+            return True  # Animation terminée
+
+        return False  # Animation en cours
+
     def apply_powerup(self, power_type):
         """Applique un power-up au joueur"""
         self.power_type = power_type
@@ -170,6 +295,11 @@ class Player:
             self.last_shot = now
 
     def draw(self, surface):
+        # Dessiner les explosions de crash en premier (sous le vaisseau)
+        if self.is_crashing:
+            for exp in self.crash_explosions:
+                exp.draw(surface)
+
         # Dessiner l'effet de reacteur (avant le vaisseau)
         for p in self.thruster_particles:
             progress = p['life'] / p['max_life']
@@ -193,12 +323,14 @@ class Player:
             pygame.draw.circle(particle_surf, (r, g, b, alpha), (size, size), size)
             surface.blit(particle_surf, (int(p['x'] - size), int(p['y'] - size)))
 
-        if self.invulnerable:
-            temp_img = self.image.copy()
-            pygame.draw.rect(temp_img, YELLOW, temp_img.get_rect(), 3)
-            surface.blit(temp_img, self.rect)
-        else:
-            surface.blit(self.image, self.rect)
+        # Dessiner le vaisseau (ignore invulnérable pendant crash)
+        if self.image:
+            if self.invulnerable and not self.is_crashing:
+                temp_img = self.image.copy()
+                pygame.draw.rect(temp_img, YELLOW, temp_img.get_rect(), 3)
+                surface.blit(temp_img, self.rect)
+            else:
+                surface.blit(self.image, self.rect)
 
         if self.power_type != 'normal':
             time_left = self.power_duration - (pygame.time.get_ticks() - self.power_start)

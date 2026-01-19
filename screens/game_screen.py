@@ -21,6 +21,9 @@ class GameScreen(Screen):
         self.game_over = False
         self.victory = False
         self.paused = False
+        self.player_crashing = False
+        self.fade_timer = 0
+        self.fade_duration = 240  # 4 secondes à 60 FPS
 
         # Initialisation du jeu
         self.level = Level()
@@ -47,16 +50,28 @@ class GameScreen(Screen):
         if self.paused or self.game_over or self.victory:
             return
 
-        # Gestion des inputs clavier
-        keys = pygame.key.get_pressed()
-        self.player.handle_input(keys)
+        # Si l'animation de crash est en cours, continuer le jeu mais sans contrôler le joueur
+        if self.player_crashing:
+            crash_finished = self.player.update()
+            # Incrémenter le timer du fondu pendant le crash
+            if self.fade_timer < self.fade_duration:
+                self.fade_timer += 1
+            if crash_finished:
+                self.game_over = True
+                self.player_crashing = False
+        else:
+            # Gestion des inputs clavier (seulement si pas en crash)
+            keys = pygame.key.get_pressed()
+            self.player.handle_input(keys)
 
-        # Tir avec Espace ou clic souris
-        if self.player.wants_to_shoot or pygame.mouse.get_pressed()[0]:
-            self.player.shoot(self.projectiles)
+            # Tir avec Espace ou clic souris
+            if self.player.wants_to_shoot or pygame.mouse.get_pressed()[0]:
+                self.player.shoot(self.projectiles)
 
+            self.player.update()
+
+        # Le jeu continue normalement (ennemis, projectiles, etc.)
         self.level.update()
-        self.player.update()
 
         for projectile in self.projectiles:
             projectile.update()
@@ -217,7 +232,10 @@ class GameScreen(Screen):
                     if not self.player.invulnerable:
                         self.player.hp -= 1
                         if self.player.hp <= 0:
-                            self.game_over = True
+                            if not self.player.is_crashing:
+                                self.player.start_crash()
+                                self.player_crashing = True
+                                self.fade_timer = 0
                         else:
                             self.player.invulnerable = True
                             self.player.invuln_start = pygame.time.get_ticks()
@@ -229,7 +247,9 @@ class GameScreen(Screen):
                 if not self.player.invulnerable:
                     self.player.hp -= 1
                     if self.player.hp <= 0:
-                        self.game_over = True
+                        if not self.player.is_crashing:
+                            self.player.start_crash()
+                            self.player_crashing = True
                     else:
                         self.player.invulnerable = True
                         self.player.invuln_start = pygame.time.get_ticks()
@@ -243,7 +263,10 @@ class GameScreen(Screen):
                     if not self.player.invulnerable:
                         self.player.hp -= 3
                         if self.player.hp <= 0:
-                            self.game_over = True
+                            if not self.player.is_crashing:
+                                self.player.start_crash()
+                                self.player_crashing = True
+                                self.fade_timer = 0
                         else:
                             self.player.invulnerable = True
                             self.player.invuln_start = pygame.time.get_ticks()
@@ -271,7 +294,10 @@ class GameScreen(Screen):
                             self.level.enemies.extend(mini_enemies)
                         self.level.enemies.remove(enemy)
                     if self.player.hp <= 0:
-                        self.game_over = True
+                        if not self.player.is_crashing:
+                            self.player.start_crash()
+                            self.player_crashing = True
+                            self.fade_timer = 0
                     else:
                         self.player.invulnerable = True
                         self.player.invuln_start = pygame.time.get_ticks()
@@ -283,7 +309,10 @@ class GameScreen(Screen):
                 if self.player.rect.colliderect(laser_rect):
                     self.player.hp -= 2
                     if self.player.hp <= 0:
-                        self.game_over = True
+                        if not self.player.is_crashing:
+                            self.player.start_crash()
+                            self.player_crashing = True
+                            self.fade_timer = 0
                     else:
                         self.player.invulnerable = True
                         self.player.invuln_start = pygame.time.get_ticks()
@@ -327,8 +356,16 @@ class GameScreen(Screen):
         self.screen.blit(hp_text, (10, 50))
         self.combo.draw(self.screen, self.font)
 
-        # Écrans de fin
-        if self.game_over:
+        # Fondu au noir progressif pendant le crash (4 secondes) et reste noir après
+        if self.fade_timer > 0:
+            progress = min(1.0, self.fade_timer / self.fade_duration)
+            fade_alpha = int(255 * progress)
+            fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            fade_surface.fill((0, 0, 0, fade_alpha))
+            self.screen.blit(fade_surface, (0, 0))
+
+        # Écrans de fin (afficher GAME OVER même pendant le crash)
+        if self.player_crashing or self.game_over:
             self._draw_game_over()
         elif self.victory:
             self._draw_victory()
