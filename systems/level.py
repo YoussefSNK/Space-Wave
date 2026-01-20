@@ -1,8 +1,12 @@
 import random
 
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, CYAN, ORANGE
+from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from graphics.background import Background
-from entities.enemy import Enemy, ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
+from entities.enemy import (
+    Enemy, BasicEnemy, FormationVEnemy, FormationLineEnemy,
+    SineWaveEnemy, ZigZagEnemy, SwoopEnemy, HorizontalEnemy,
+    ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
+)
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from systems.movement_patterns import (
     SineWavePattern, ZigZagPattern, SwoopPattern, HorizontalWavePattern
@@ -59,7 +63,7 @@ class Level:
     def spawn_enemies(self, count):
         for _ in range(count):
             x = random.randint(20, SCREEN_WIDTH - 20)
-            enemy = Enemy(x, -20)
+            enemy = BasicEnemy(x, -20)
             self.enemies.append(enemy)
         print(f'Spawned {count} enemies at timer {self.timer}')
 
@@ -112,8 +116,7 @@ class Level:
         for i in range(count):
             offset = (i - count // 2) * spacing
             y_offset = abs(i - count // 2) * 30
-            enemy = Enemy(center_x + offset, -20 - y_offset, speed=2.5)
-            enemy.image.fill(CYAN)
+            enemy = FormationVEnemy(center_x + offset, -20 - y_offset)
             self.enemies.append(enemy)
         print(f'Spawned V formation with {count} enemies at timer {self.timer}')
 
@@ -122,8 +125,7 @@ class Level:
         spacing = SCREEN_WIDTH // (count + 1)
         for i in range(count):
             x = spacing * (i + 1)
-            enemy = Enemy(x, -20, speed=2)
-            enemy.image.fill(ORANGE)
+            enemy = FormationLineEnemy(x, -20)
             self.enemies.append(enemy)
         print(f'Spawned line formation with {count} enemies at timer {self.timer}')
 
@@ -133,8 +135,7 @@ class Level:
         for i in range(count):
             x = spacing * (i + 1)
             pattern = SineWavePattern(amplitude=80, frequency=0.05, base_speed=2.5)
-            enemy = Enemy(x, -20, movement_pattern=pattern)
-            enemy.image.fill((255, 100, 200))
+            enemy = SineWaveEnemy(x, -20, movement_pattern=pattern)
             self.enemies.append(enemy)
         print(f'Spawned {count} sine wave enemies at timer {self.timer}')
 
@@ -144,21 +145,18 @@ class Level:
         for i in range(count):
             x = spacing * (i + 1)
             pattern = ZigZagPattern(amplitude=60, switch_time=25, base_speed=3)
-            enemy = Enemy(x, -20, movement_pattern=pattern)
-            enemy.image.fill((100, 255, 100))
+            enemy = ZigZagEnemy(x, -20, movement_pattern=pattern)
             self.enemies.append(enemy)
         print(f'Spawned {count} zigzag enemies at timer {self.timer}')
 
     def spawn_swoop_attack(self):
         """Spawn des ennemis qui font un pique depuis les cotes"""
         pattern_right = SwoopPattern(swoop_direction=1)
-        enemy_left = Enemy(50, -20, movement_pattern=pattern_right)
-        enemy_left.image.fill((255, 200, 0))
+        enemy_left = SwoopEnemy(50, -20, movement_pattern=pattern_right)
         self.enemies.append(enemy_left)
 
         pattern_left = SwoopPattern(swoop_direction=-1)
-        enemy_right = Enemy(SCREEN_WIDTH - 50, -20, movement_pattern=pattern_left)
-        enemy_right.image.fill((255, 200, 0))
+        enemy_right = SwoopEnemy(SCREEN_WIDTH - 50, -20, movement_pattern=pattern_left)
         self.enemies.append(enemy_right)
 
         powerup_dropper = random.choice([enemy_left, enemy_right])
@@ -173,8 +171,7 @@ class Level:
             direction = 1 if i % 2 == 0 else -1
             start_x = 50 if direction == 1 else SCREEN_WIDTH - 50
             pattern = HorizontalWavePattern(direction=direction, speed=5)
-            enemy = Enemy(start_x, y, movement_pattern=pattern)
-            enemy.image.fill((150, 150, 255))
+            enemy = HorizontalEnemy(start_x, y, movement_pattern=pattern)
             self.enemies.append(enemy)
         print(f'Spawned horizontal squadron at timer {self.timer}')
 

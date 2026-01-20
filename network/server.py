@@ -16,7 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from systems.level import Level
 from entities.player import Player
-from entities.enemy import Enemy, ShootingEnemy
+from entities.enemy import (
+    Enemy, BasicEnemy, FormationVEnemy, FormationLineEnemy,
+    SineWaveEnemy, ZigZagEnemy, SwoopEnemy, HorizontalEnemy,
+    ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
+)
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.powerup import PowerUp
 from entities.projectiles import (
@@ -434,6 +438,12 @@ class GameServer:
                     lobby.level.boss1_defeated = True
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(target, lobby.enemy_projectiles)
+            elif isinstance(enemy, DashEnemy):
+                # DashEnemy a besoin de la position du joueur pour calculer sa trajectoire
+                enemy.update_with_player(target)
+            elif isinstance(enemy, (TankEnemy, SplitterEnemy)):
+                # Ces ennemis utilisent la méthode update standard
+                enemy.update()
 
     def _create_boss_explosions(self, lobby: GameLobby, enemy, count: int, size: int, duration: int):
         """Crée des explosions à la mort d'un boss."""
@@ -512,20 +522,31 @@ class GameServer:
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
                     else:
-                        # Créer une explosion
-                        lobby.explosions.append({
-                            "x": enemy.rect.centerx,
-                            "y": enemy.rect.centery,
-                            "duration": 300,
-                            "start_time": pygame.time.get_ticks()
-                        })
+                        # Décrémenter les HP de l'ennemi
+                        enemy.hp -= 1
 
-                        # Drop de powerup
-                        if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
-                            power_types = ['double', 'triple', 'spread']
-                            powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, random.choice(power_types))
-                            lobby.powerups.append(powerup)
-                        lobby.level.enemies.remove(enemy)
+                        # Si l'ennemi est mort, le retirer
+                        if enemy.hp <= 0:
+                            # Drop de powerup
+                            if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
+                                power_types = ['double', 'triple', 'spread']
+                                powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, random.choice(power_types))
+                                lobby.powerups.append(powerup)
+
+                            # Gestion de la division des SplitterEnemy
+                            if isinstance(enemy, SplitterEnemy) and not enemy.is_mini:
+                                mini_enemies = enemy.split()
+                                lobby.level.enemies.extend(mini_enemies)
+
+                            lobby.level.enemies.remove(enemy)
+
+                    # Créer une explosion d'impact (même si l'ennemi survit)
+                    lobby.explosions.append({
+                        "x": enemy.rect.centerx,
+                        "y": enemy.rect.centery,
+                        "duration": 300,
+                        "start_time": pygame.time.get_ticks()
+                    })
 
                     if proj in lobby.projectiles:
                         lobby.projectiles.remove(proj)
@@ -571,6 +592,28 @@ class GameServer:
                     else:
                         sp.player.invulnerable = True
                         sp.player.invuln_start = pygame.time.get_ticks()
+
+                    # Les ennemis perdent aussi des HP lors du contact
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
+                        enemy.take_damage(sp.player.contact_damage)
+                        if enemy.hp <= 0 and not enemy.is_dying:
+                            enemy.is_dying = True
+                    else:
+                        enemy.hp -= sp.player.contact_damage
+                        # Si l'ennemi non-boss est mort, le retirer
+                        if enemy.hp <= 0:
+                            if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
+                                power_types = ['double', 'triple', 'spread']
+                                powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, random.choice(power_types))
+                                lobby.powerups.append(powerup)
+
+                            # Gestion de la division des SplitterEnemy
+                            if isinstance(enemy, SplitterEnemy) and not enemy.is_mini:
+                                mini_enemies = enemy.split()
+                                lobby.level.enemies.extend(mini_enemies)
+
+                            if enemy in lobby.level.enemies:
+                                lobby.level.enemies.remove(enemy)
 
                     # Explosion de contact
                     lobby.explosions.append({
@@ -641,7 +684,8 @@ class GameServer:
                 "x": enemy.rect.centerx,
                 "y": enemy.rect.centery,
                 "hp": getattr(enemy, 'hp', 1),
-                "is_dying": getattr(enemy, 'is_dying', False)
+                "is_dying": getattr(enemy, 'is_dying', False),
+                "speed": getattr(enemy, 'speed', 3)
             }
             # Données d'animation pour tous les boss
             if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
@@ -654,6 +698,12 @@ class GameServer:
                 enemy_data["laser_warning"] = getattr(enemy, 'laser_warning', False)
             if isinstance(enemy, Boss4):
                 enemy_data["charging"] = getattr(enemy, 'charging', False)
+            # Données spécifiques aux ennemis de vague 2
+            if isinstance(enemy, DashEnemy):
+                enemy_data["is_dashing"] = getattr(enemy, 'is_dashing', False)
+                enemy_data["dash_direction"] = getattr(enemy, 'dash_direction', (0, 1))
+            if isinstance(enemy, SplitterEnemy):
+                enemy_data["is_mini"] = getattr(enemy, 'is_mini', False)
             enemies_data.append(enemy_data)
 
         # Sérialiser les projectiles

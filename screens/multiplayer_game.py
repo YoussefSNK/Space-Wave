@@ -8,7 +8,11 @@ from config import SCREEN_WIDTH, SCREEN_HEIGHT, BLACK, WHITE, CYAN, RED, YELLOW
 from graphics.background import Background
 from graphics.effects import Explosion
 from entities.player import Player
-from entities.enemy import Enemy, ShootingEnemy
+from entities.enemy import (
+    Enemy, BasicEnemy, FormationVEnemy, FormationLineEnemy,
+    SineWaveEnemy, ZigZagEnemy, SwoopEnemy, HorizontalEnemy,
+    ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
+)
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.powerup import PowerUp
 from entities.projectiles import (
@@ -160,7 +164,17 @@ class MultiplayerGameScreen(Screen):
         # Mapping des types d'ennemis vers leurs classes
         self.enemy_classes = {
             "Enemy": Enemy,
+            "BasicEnemy": BasicEnemy,
+            "FormationVEnemy": FormationVEnemy,
+            "FormationLineEnemy": FormationLineEnemy,
+            "SineWaveEnemy": SineWaveEnemy,
+            "ZigZagEnemy": ZigZagEnemy,
+            "SwoopEnemy": SwoopEnemy,
+            "HorizontalEnemy": HorizontalEnemy,
             "ShootingEnemy": ShootingEnemy,
+            "TankEnemy": TankEnemy,
+            "DashEnemy": DashEnemy,
+            "SplitterEnemy": SplitterEnemy,
             "Boss": Boss,
             "Boss2": Boss2,
             "Boss3": Boss3,
@@ -329,8 +343,23 @@ class MultiplayerGameScreen(Screen):
 
             if hasattr(enemy, 'hp'):
                 enemy.hp = e_data.get("hp", enemy.hp)
+            if hasattr(enemy, 'speed'):
+                enemy.speed = e_data.get("speed", enemy.speed)
             if hasattr(enemy, 'is_dying'):
                 enemy.is_dying = e_data.get("is_dying", False)
+
+            if isinstance(enemy, DashEnemy):
+                enemy.is_dashing = e_data.get("is_dashing", False)
+                enemy.dash_direction = tuple(e_data.get("dash_direction", (0, 1)))
+
+            if isinstance(enemy, SplitterEnemy):
+                is_mini = e_data.get("is_mini", False)
+                if hasattr(enemy, 'is_mini') and enemy.is_mini != is_mini:
+                    enemy.is_mini = is_mini
+                    enemy.image = enemy._create_sprite()
+                    enemy.rect = enemy.image.get_rect(center=(x, y))
+                else:
+                    enemy.is_mini = is_mini
 
             # Synchroniser les animations des boss
             if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):

@@ -1,13 +1,14 @@
 import pygame
 
-from config import RED
+from config import RED, CYAN, ORANGE
 from .projectiles import EnemyProjectile
 
 
 class Enemy:
-    def __init__(self, x, y, speed=3, movement_pattern=None):
+    """Classe de base pour tous les ennemis."""
+    def __init__(self, x, y, speed=3, movement_pattern=None, color=RED):
         self.image = pygame.Surface((40, 40))
-        self.image.fill(RED)
+        self.image.fill(color)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
         self.hp = 1
@@ -26,6 +27,48 @@ class Enemy:
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
+
+
+class BasicEnemy(Enemy):
+    """Ennemi de base rouge - utilisé pour les spawns simples."""
+    def __init__(self, x, y, speed=3, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=RED)
+
+
+class FormationVEnemy(Enemy):
+    """Ennemi de formation en V - cyan."""
+    def __init__(self, x, y, speed=2.5, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=CYAN)
+
+
+class FormationLineEnemy(Enemy):
+    """Ennemi de formation en ligne horizontale - orange."""
+    def __init__(self, x, y, speed=2, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=ORANGE)
+
+
+class SineWaveEnemy(Enemy):
+    """Ennemi avec mouvement sinusoïdal - rose."""
+    def __init__(self, x, y, speed=2.5, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=(255, 100, 200))
+
+
+class ZigZagEnemy(Enemy):
+    """Ennemi avec mouvement en zigzag - vert clair."""
+    def __init__(self, x, y, speed=3, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=(100, 255, 100))
+
+
+class SwoopEnemy(Enemy):
+    """Ennemi qui fait un piqué depuis les côtés - jaune/or."""
+    def __init__(self, x, y, speed=2, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=(255, 200, 0))
+
+
+class HorizontalEnemy(Enemy):
+    """Ennemi d'escadrille horizontale - bleu clair."""
+    def __init__(self, x, y, speed=5, movement_pattern=None):
+        super().__init__(x, y, speed, movement_pattern, color=(150, 150, 255))
 
 
 class ShootingEnemy(Enemy):
