@@ -13,17 +13,16 @@ from entities.projectiles import (
     Projectile, SpreadProjectile,
     EnemyProjectile, BossProjectile, Boss2Projectile, Boss3Projectile,
     Boss4Projectile, Boss5Projectile, Boss6Projectile,
-    HomingProjectile, SplittingProjectile, BouncingProjectile,
     ZigZagProjectile, GravityProjectile, TeleportingProjectile,
-    VortexProjectile, BlackHoleProjectile, MirrorProjectile, PulseWaveProjectile
+    VortexProjectile
 )
 from entities.powerup import PowerUp
 from entities.enemy import Enemy, ShootingEnemy
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7
-from entities.projectiles import EdgeRollerProjectile, BallBreakerProjectile
 from graphics.background import Background
 from graphics.effects import Explosion
 from systems.combo import ComboSystem
+from systems.projectile_manager import manage_enemy_projectiles
 
 
 def get_pattern_name(enemy):
@@ -355,37 +354,8 @@ def run_test(entity_type):
         # Supprimer les ennemis hors écran (sauf boss)
         enemies = [e for e in enemies if e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7))]
 
-        # Update projectiles ennemis
-        for e_proj in enemy_projectiles:
-            if isinstance(e_proj, HomingProjectile):
-                e_proj.update(player.rect.center)
-            elif isinstance(e_proj, EdgeRollerProjectile):
-                e_proj.update(player.rect.center, enemy_projectiles)
-            elif isinstance(e_proj, BallBreakerProjectile):
-                e_proj.update(enemy_projectiles)
-            else:
-                e_proj.update()
-
-        # Gérer les projectiles qui se divisent
-        new_split = []
-        for e_proj in enemy_projectiles:
-            if isinstance(e_proj, SplittingProjectile) and e_proj.should_split():
-                new_split.extend(e_proj.split())
-            elif isinstance(e_proj, MirrorProjectile) and e_proj.should_split():
-                new_split.extend(e_proj.split())
-        enemy_projectiles.extend(new_split)
-
-        # Filtrer projectiles
-        enemy_projectiles = [p for p in enemy_projectiles if (
-            p.rect.top < SCREEN_HEIGHT and
-            p.rect.left < SCREEN_WIDTH and
-            p.rect.right > 0 and
-            p.rect.bottom > 0 and
-            not (isinstance(p, HomingProjectile) and p.is_expired()) and
-            not (isinstance(p, BlackHoleProjectile) and p.is_expired()) and
-            not (isinstance(p, PulseWaveProjectile) and p.is_expired()) and
-            not (isinstance(p, BallBreakerProjectile) and p.bounces_left < 0)
-        )]
+        # Update projectiles ennemis avec le gestionnaire centralisé
+        enemy_projectiles = manage_enemy_projectiles(enemy_projectiles, player.rect.center)
 
         # Collisions projectiles joueur -> ennemis
         for projectile in projectiles[:]:

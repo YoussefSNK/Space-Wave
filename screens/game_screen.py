@@ -4,11 +4,12 @@ from screens.base import Screen
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE
 from systems.level import Level
 from systems.combo import ComboSystem
+from systems.projectile_manager import manage_enemy_projectiles
 from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.enemy import ShootingEnemy, DashEnemy, SplitterEnemy
-from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile, RicochetProjectile, EdgeRollerProjectile, BallBreakerProjectile
+from entities.projectiles import RicochetProjectile
 from graphics.effects import Explosion
 
 
@@ -155,36 +156,11 @@ class GameScreen(Screen):
                 enemy.update_with_player(self.player.rect.center)
 
     def _update_enemy_projectiles(self):
-        for e_proj in self.enemy_projectiles:
-            if isinstance(e_proj, HomingProjectile):
-                e_proj.update(self.player.rect.center)
-            elif isinstance(e_proj, EdgeRollerProjectile):
-                e_proj.update(self.player.rect.center, self.enemy_projectiles)
-            elif isinstance(e_proj, BallBreakerProjectile):
-                e_proj.update(self.enemy_projectiles)
-            else:
-                e_proj.update()
-
-        # Gérer les projectiles qui se divisent
-        new_split_projectiles = []
-        for e_proj in self.enemy_projectiles:
-            if isinstance(e_proj, SplittingProjectile) and e_proj.should_split():
-                new_split_projectiles.extend(e_proj.split())
-            elif isinstance(e_proj, MirrorProjectile) and e_proj.should_split():
-                new_split_projectiles.extend(e_proj.split())
-        self.enemy_projectiles.extend(new_split_projectiles)
-
-        # Filtrer les projectiles hors écran et les projectiles expirés
-        self.enemy_projectiles = [p for p in self.enemy_projectiles if (
-            p.rect.top < SCREEN_HEIGHT and
-            p.rect.left < SCREEN_WIDTH and
-            p.rect.right > 0 and
-            p.rect.bottom > 0 and
-            not (isinstance(p, HomingProjectile) and p.is_expired()) and
-            not (isinstance(p, BlackHoleProjectile) and p.is_expired()) and
-            not (isinstance(p, PulseWaveProjectile) and p.is_expired()) and
-            not (isinstance(p, BallBreakerProjectile) and p.bounces_left < 0)
-        )]
+        # Utiliser le gestionnaire centralisé pour mettre à jour et filtrer les projectiles
+        self.enemy_projectiles = manage_enemy_projectiles(
+            self.enemy_projectiles,
+            self.player.rect.center
+        )
 
     def _check_projectile_collisions(self):
         for projectile in self.projectiles[:]:
