@@ -816,17 +816,25 @@ class EdgeRollerProjectile(EnemyProjectile):
         self.rect = self.image.get_rect(center=(x, y))
         self.dx = dx
         self.dy = dy
-        self.speed = speed
+        self.base_speed = speed
+        self.speed = speed  # Sera modifié dynamiquement
+        self.max_speed = speed * 3  # Vitesse maximale
 
         self.phase = self.PHASE_CHASE
         self.roll_direction = None
-        self.roll_speed = 7
+        self.roll_speed = speed  # Sera modifié dynamiquement
         self.margin = 10  # Marge par rapport aux bords
         self.clockwise = True  # Sens de rotation (True = horaire, False = anti-horaire)
+
+        # Timer global pour la courbe de vitesse parabolique
+        self.global_timer = 0
 
         # Pour la phase orbit
         self.orbit_timer = 0
         self.orbit_duration = 60  # 1 seconde a 60 FPS
+        self.orbit_phase_1_duration = 20  # Duree de l'acceleration (phase 1)
+        self.orbit_phase_2_duration = 20  # Duree a vitesse max (phase 2)
+        # Phase 3 = reste du temps (orbit_duration - phase_1 - phase_2)
         self.orbit_center_x = 0
         self.orbit_center_y = 0
         self.orbit_radius = 0
@@ -848,6 +856,9 @@ class EdgeRollerProjectile(EnemyProjectile):
         if player_position:
             self.target_x, self.target_y = player_position
 
+        # Mettre à jour la vitesse selon la courbe parabolique
+        self._update_speed()
+
         if self.phase == self.PHASE_CHASE:
             self._update_chase()
         elif self.phase == self.PHASE_ROLL:
@@ -856,6 +867,40 @@ class EdgeRollerProjectile(EnemyProjectile):
             self._update_orbit()
         elif self.phase == self.PHASE_FINAL:
             self._update_final()
+
+    def _update_speed(self):
+        """Met à jour la vitesse selon une courbe parabolique sur les phases 1, 2 et 3"""
+        if self.phase == self.PHASE_FINAL:
+            return  # Phase finale utilise sa propre vitesse
+
+        self.global_timer += 1
+
+        # Phase 1 (CHASE): Accélération exponentielle sur 1 seconde
+        if self.phase == self.PHASE_CHASE:
+            # Accélération exponentielle: commence lent, monte vers max_speed
+            # On utilise une formule qui monte rapidement au début puis ralentit
+            progress = min(1.0, self.global_timer / 60.0)  # Sur 1 seconde (60 frames)
+            speed_factor = 1.0 - math.exp(-progress * 4.0)  # Accélération exponentielle
+            self.speed = self.base_speed + (self.max_speed - self.base_speed) * speed_factor
+            self.roll_speed = self.speed
+
+        # Phase 2 (ROLL): Continue d'accélérer si pas encore au max, sinon reste au max
+        elif self.phase == self.PHASE_ROLL:
+            # Continuer l'accélération ou rester au max
+            if self.speed < self.max_speed:
+                progress = min(1.0, self.global_timer / 120.0)  # Sur ~2 secondes au total
+                speed_factor = 1.0 - math.exp(-progress * 4.0)
+                self.speed = self.base_speed + (self.max_speed - self.base_speed) * speed_factor
+            else:
+                self.speed = self.max_speed
+            self.roll_speed = self.speed
+
+        # Phase 3 (ORBIT): Décélération linéaire sur 1 seconde
+        elif self.phase == self.PHASE_ORBIT:
+            # Décélération linéaire: 100% -> 0%
+            decay_progress = self.orbit_timer / self.orbit_duration  # 0 à 1 sur 60 frames
+            speed_factor = 1.0 - decay_progress  # Décroissance linéaire de 1 à 0
+            self.speed = self.max_speed * speed_factor
 
     def _update_chase(self):
         """Phase 1: Fonce vers le joueur jusqu'a toucher un bord"""
@@ -1013,15 +1058,17 @@ class EdgeRollerProjectile(EnemyProjectile):
         self.orbit_speed_angle = 0.027  # Vitesse ralentie (divisée par 3)
 
     def _update_orbit(self):
-        """Phase 3: Orbite autour du joueur pour quitter le contour"""
+        """Phase 3: Orbite autour du joueur pour quitter le contour
+        La vitesse est gérée par _update_speed() et décélère exponentiellement
+        """
         self.orbit_timer += 1
 
-        # Ralentissement exponentiel de la vitesse d'orbite
-        # On commence à vitesse normale puis on ralentit exponentiellement
-        decay_factor = math.exp(-self.orbit_timer / 20.0)  # Ralentissement exponentiel
-        current_speed = self.orbit_speed_angle * decay_factor
+        # La vitesse angulaire est proportionnelle à la vitesse linéaire
+        # qui est maintenant gérée par _update_speed()
+        speed_ratio = self.speed / self.max_speed if self.max_speed > 0 else 0
+        current_speed = self.orbit_speed_angle * speed_ratio
 
-        # Faire l'orbite avec la vitesse ralentie
+        # Faire l'orbite avec la vitesse calculee
         self.orbit_angle += current_speed * self.orbit_direction
 
         # Reduire le rayon progressivement pour une trajectoire en spirale sortante
@@ -1048,8 +1095,8 @@ class EdgeRollerProjectile(EnemyProjectile):
             if dist > 0:
                 self.dx = dx / dist
                 self.dy = dy / dist
-            # Augmenter la vitesse pour la phase finale
-            self.speed = self.speed + 3
+            # Vitesse x2 pour la phase finale
+            self.speed = self.base_speed * 2
 
         # Continuer en ligne droite avec la direction calculee
         self.rect.x += int(self.dx * self.speed)
