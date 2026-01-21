@@ -8,7 +8,7 @@ from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.enemy import ShootingEnemy, DashEnemy, SplitterEnemy
-from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile, RicochetProjectile
+from entities.projectiles import HomingProjectile, SplittingProjectile, MirrorProjectile, BlackHoleProjectile, PulseWaveProjectile, RicochetProjectile, EdgeRollerProjectile, BallBreakerProjectile
 from graphics.effects import Explosion
 
 
@@ -158,6 +158,10 @@ class GameScreen(Screen):
         for e_proj in self.enemy_projectiles:
             if isinstance(e_proj, HomingProjectile):
                 e_proj.update(self.player.rect.center)
+            elif isinstance(e_proj, EdgeRollerProjectile):
+                e_proj.update(self.player.rect.center, self.enemy_projectiles)
+            elif isinstance(e_proj, BallBreakerProjectile):
+                e_proj.update(self.enemy_projectiles)
             else:
                 e_proj.update()
 
@@ -178,7 +182,8 @@ class GameScreen(Screen):
             p.rect.bottom > 0 and
             not (isinstance(p, HomingProjectile) and p.is_expired()) and
             not (isinstance(p, BlackHoleProjectile) and p.is_expired()) and
-            not (isinstance(p, PulseWaveProjectile) and p.is_expired())
+            not (isinstance(p, PulseWaveProjectile) and p.is_expired()) and
+            not (isinstance(p, BallBreakerProjectile) and p.bounces_left < 0)
         )]
 
     def _check_projectile_collisions(self):

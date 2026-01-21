@@ -772,9 +772,137 @@ class Boss7Projectile(EnemyProjectile):
         pygame.draw.circle(surface, WHITE, self.rect.center, 2)
 
 
+class BallBreakerProjectile(EnemyProjectile):
+    """
+    Projectile special du Boss 7 - Ball Breaker
+    Lance en ligne droite vers le joueur, peut rebondir jusqu'a 4 fois.
+    Rebondit sur les bords de l'ecran et sur les autres balles.
+    Au 5eme rebond: traverse les bords ou explose si c'est une balle.
+    """
+    def __init__(self, x, y, target_x, target_y, speed=8):
+        # Calculer direction initiale vers le joueur
+        dx = target_x - x
+        dy = target_y - y
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0:
+            dx /= dist
+            dy /= dist
+
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=12,
+            trail_color_func=lambda progress, alpha: (255, 100, 150, alpha),
+            trail_size_func=lambda progress: max(2, int(7 * progress))
+        )
+
+        self.image = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (255, 100, 150), (24, 24), 24)
+        pygame.draw.circle(self.image, (255, 150, 200), (24, 24), 15)
+        pygame.draw.circle(self.image, WHITE, (24, 24), 6)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.bounces_left = 4
+        self.margin = 10
+        self.ball_radius = 24
+
+    def update(self, other_projectiles=None):
+        self.update_trail()
+
+        # Déplacement
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+        # Collision avec d'autres balles (EdgeRoller ou BallBreaker) - vérifier AVANT les bords
+        ball_collision = False
+        if other_projectiles and self.bounces_left > 0:
+            for other in other_projectiles:
+                if other is self:
+                    continue
+                if isinstance(other, (EdgeRollerProjectile, BallBreakerProjectile)):
+                    # Calcul de la distance entre les centres
+                    dx_ball = self.rect.centerx - other.rect.centerx
+                    dy_ball = self.rect.centery - other.rect.centery
+                    distance = math.sqrt(dx_ball*dx_ball + dy_ball*dy_ball)
+                    # Collision si distance < somme des rayons (24 + 24 = 48)
+                    if distance < 48 and distance > 0:
+                        # Normaliser le vecteur de collision
+                        dx_ball /= distance
+                        dy_ball /= distance
+
+                        # Réfléchir la direction selon la normale de collision
+                        # Formule de réflexion: v' = v - 2(v·n)n
+                        dot = self.dx * dx_ball + self.dy * dy_ball
+                        self.dx = self.dx - 2 * dot * dx_ball
+                        self.dy = self.dy - 2 * dot * dy_ball
+
+                        # Repousser les balles pour éviter qu'elles restent collées
+                        overlap = 48 - distance
+                        self.rect.x += int(dx_ball * (overlap + 2))
+                        self.rect.y += int(dy_ball * (overlap + 2))
+
+                        self.bounces_left -= 1
+                        ball_collision = True
+                        break
+
+        # Rebond sur les bords si des rebonds restent (seulement si pas de collision avec une balle)
+        if self.bounces_left > 0 and not ball_collision:
+            bounced_this_frame = False
+            # Rebond gauche/droite
+            if self.rect.left <= self.margin:
+                self.rect.left = self.margin
+                self.dx = abs(self.dx)
+                if not bounced_this_frame:
+                    self.bounces_left -= 1
+                    bounced_this_frame = True
+            elif self.rect.right >= SCREEN_WIDTH - self.margin:
+                self.rect.right = SCREEN_WIDTH - self.margin
+                self.dx = -abs(self.dx)
+                if not bounced_this_frame:
+                    self.bounces_left -= 1
+                    bounced_this_frame = True
+
+            # Rebond haut/bas
+            if self.rect.top <= self.margin:
+                self.rect.top = self.margin
+                self.dy = abs(self.dy)
+                if not bounced_this_frame:
+                    self.bounces_left -= 1
+                    bounced_this_frame = True
+            elif self.rect.bottom >= SCREEN_HEIGHT - self.margin:
+                self.rect.bottom = SCREEN_HEIGHT - self.margin
+                self.dy = -abs(self.dy)
+                if not bounced_this_frame:
+                    self.bounces_left -= 1
+                    bounced_this_frame = True
+
+    def should_explode(self):
+        """Retourne True si le projectile doit exploser (5ème rebond sur une balle)"""
+        # Cette méthode sera appelée par le code de gestion des projectiles
+        return self.bounces_left < 0
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+
+        # Couleur varie selon le nombre de rebonds restants
+        if self.bounces_left >= 3:
+            color1, color2 = (255, 100, 150), (255, 150, 200)
+        elif self.bounces_left >= 2:
+            color1, color2 = (255, 150, 100), (255, 200, 150)
+        elif self.bounces_left >= 1:
+            color1, color2 = (255, 200, 100), (255, 230, 150)
+        else:
+            color1, color2 = (255, 100, 100), (255, 150, 150)
+
+        pygame.draw.circle(surface, color1, self.rect.center, 24)
+        pygame.draw.circle(surface, color2, self.rect.center, 15)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 6)
+
+
 class EdgeRollerProjectile(EnemyProjectile):
     """
-    Projectile special du Boss 7 - Ball 1
+    Projectile special du Boss 7 - Edge Roller
     Comportement en plusieurs phases:
     1. Fonce vers le joueur
     2. Quand il touche un bord, longe le contour de l'ecran

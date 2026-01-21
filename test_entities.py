@@ -20,7 +20,7 @@ from entities.projectiles import (
 from entities.powerup import PowerUp
 from entities.enemy import Enemy, ShootingEnemy
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7
-from entities.projectiles import EdgeRollerProjectile
+from entities.projectiles import EdgeRollerProjectile, BallBreakerProjectile
 from graphics.background import Background
 from graphics.effects import Explosion
 from systems.combo import ComboSystem
@@ -361,6 +361,8 @@ def run_test(entity_type):
                 e_proj.update(player.rect.center)
             elif isinstance(e_proj, EdgeRollerProjectile):
                 e_proj.update(player.rect.center, enemy_projectiles)
+            elif isinstance(e_proj, BallBreakerProjectile):
+                e_proj.update(enemy_projectiles)
             else:
                 e_proj.update()
 
@@ -381,7 +383,8 @@ def run_test(entity_type):
             p.rect.bottom > 0 and
             not (isinstance(p, HomingProjectile) and p.is_expired()) and
             not (isinstance(p, BlackHoleProjectile) and p.is_expired()) and
-            not (isinstance(p, PulseWaveProjectile) and p.is_expired())
+            not (isinstance(p, PulseWaveProjectile) and p.is_expired()) and
+            not (isinstance(p, BallBreakerProjectile) and p.bounces_left < 0)
         )]
 
         # Collisions projectiles joueur -> ennemis

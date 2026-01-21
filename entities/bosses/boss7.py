@@ -5,7 +5,7 @@ import math
 from config import SCREEN_WIDTH
 from graphics.effects import Explosion
 from entities.enemy import Enemy
-from entities.projectiles import Boss7Projectile, EdgeRollerProjectile
+from entities.projectiles import Boss7Projectile, EdgeRollerProjectile, BallBreakerProjectile
 
 
 class Boss7(Enemy):
@@ -18,11 +18,12 @@ class Boss7(Enemy):
         self.target_y = target_y
         self.timer = 0
         self.shoot_timer = 0
-        self.shoot_delay_frames = 75  # Delai ralenti pour laisser le temps aux joueurs
+        self.shoot_delay_frames = 120  # 2 secondes entre chaque tir (60 FPS * 2)
         self.shoot_count = 0
         self.pattern = 0
         self.pattern_timer = 0
         self.pattern_duration = 360
+        self.next_projectile_type = "ball_breaker"  # Commence avec Ball Breaker
         self.is_dying = False
         self.death_timer = 0
         self.death_explosions = []
@@ -110,17 +111,27 @@ class Boss7(Enemy):
         self.shoot_count += 1
 
         if self.pattern == 0:
-            # Pattern 1: EdgeRollerProjectile - Balle qui longe les bords
+            # Pattern 1: Alterne entre Ball Breaker et Edge Roller
             # Lance 1 balle a la fois, position alternee
             angle = ((self.shoot_count - 1) % 2) * math.pi + self.timer * 0.05
             spawn_x = cx + int(math.cos(angle) * 50)
             spawn_y = cy + int(math.sin(angle) * 30) + 40
 
-            proj = EdgeRollerProjectile(
-                spawn_x, spawn_y,
-                player_pos[0], player_pos[1],
-                speed=9
-            )
+            if self.next_projectile_type == "ball_breaker":
+                proj = BallBreakerProjectile(
+                    spawn_x, spawn_y,
+                    player_pos[0], player_pos[1],
+                    speed=8
+                )
+                self.next_projectile_type = "edge_roller"
+            else:
+                proj = EdgeRollerProjectile(
+                    spawn_x, spawn_y,
+                    player_pos[0], player_pos[1],
+                    speed=9
+                )
+                self.next_projectile_type = "ball_breaker"
+
             projectiles_list.append(proj)
 
     def update_death(self):
