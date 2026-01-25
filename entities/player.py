@@ -3,7 +3,7 @@ import random
 import math
 
 from config import YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT
-from .projectiles import Projectile, SpreadProjectile, RicochetProjectile
+from .projectiles import Projectile, SpreadProjectile, RicochetProjectile, ZigZagPlayerProjectile
 from resource_path import resource_path
 
 
@@ -292,6 +292,9 @@ class Player:
             elif self.power_type == 'ricochet':
                 projectile_list.append(RicochetProjectile(cx, cy))
 
+            elif self.power_type == 'zigzag':
+                projectile_list.append(ZigZagPlayerProjectile(cx, cy))
+
             self.last_shot = now
 
     def draw(self, surface):
@@ -350,6 +353,8 @@ class Player:
                 color = (0, 255, 100)
             elif self.power_type == 'ricochet':
                 color = (255, 100, 0)  # Orange
+            elif self.power_type == 'zigzag':
+                color = (255, 0, 200)  # Magenta
             else:
                 color = WHITE
             pygame.draw.rect(surface, color, (bar_x, bar_y, int(bar_width * progress), bar_height))

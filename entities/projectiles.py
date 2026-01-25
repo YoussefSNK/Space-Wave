@@ -100,6 +100,29 @@ class RicochetProjectile(Projectile):
         return True
 
 
+class ZigZagPlayerProjectile(Projectile):
+    """Projectile du joueur qui zigzague en changeant de diagonale regulierement"""
+    def __init__(self, x, y, speed=10, zigzag_interval=15):
+        super().__init__(x, y, speed)
+        self.image.fill((255, 0, 200))  # Magenta
+        self.zigzag_interval = zigzag_interval  # Nombre de frames entre chaque changement
+        self.timer = 0
+        self.direction = 1  # 1 = droite, -1 = gauche
+        self.diagonal_speed = 3  # Vitesse horizontale du zigzag
+
+    def update(self):
+        self.update_trail()
+        self.timer += 1
+
+        # Changer de direction tous les zigzag_interval frames
+        if self.timer % self.zigzag_interval == 0:
+            self.direction *= -1
+
+        # Mouvement diagonal: vers le haut + lateral
+        self.rect.y -= self.speed
+        self.rect.x += self.direction * self.diagonal_speed
+
+
 class EnemyProjectile(TrailedProjectile):
     def __init__(self, x, y, dx, dy, speed=7):
         super().__init__(

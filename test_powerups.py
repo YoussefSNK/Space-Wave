@@ -91,10 +91,11 @@ def run_powerup_test():
         PowerUpZone(170, 50, 'triple', (255, 0, 255), 'TRIPLE'),
         PowerUpZone(290, 50, 'spread', (0, 255, 100), 'SPREAD'),
         PowerUpZone(410, 50, 'ricochet', (255, 100, 0), 'RICOCHET'),
+        PowerUpZone(530, 50, 'zigzag', (255, 0, 200), 'ZIGZAG'),
     ]
 
     # Zone pour supprimer les power-ups
-    clear_zone = ClearPowerZone(530, 50)
+    clear_zone = ClearPowerZone(50, 170)
 
     # Système de spawn d'ennemis
     last_spawn_time = pygame.time.get_ticks()
@@ -246,7 +247,7 @@ def run_powerup_test():
         # Instructions
         instructions = [
             "Déplacez-vous sur les carrés pour acquérir des power-ups",
-            "Carrés de power-up en haut: DOUBLE, TRIPLE, SPREAD, RICOCHET",
+            "Carrés de power-up en haut: DOUBLE, TRIPLE, SPREAD, RICOCHET, ZIGZAG",
             "Carré rouge (CLEAR): supprime les power-ups actuels",
             "Vagues de 5 ennemis toutes les 5 secondes",
             "",

@@ -18,6 +18,8 @@ class PowerUp:
             self.color = (0, 255, 100)
         elif power_type == 'ricochet':
             self.color = (255, 100, 0)
+        elif power_type == 'zigzag':
+            self.color = (255, 0, 200)  # Magenta
         else:
             self.color = WHITE
 
