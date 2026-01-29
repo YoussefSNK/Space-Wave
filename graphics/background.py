@@ -96,15 +96,40 @@ class Background:
             # Générer les planètes initiales
             self._generate_initial_planets()
 
-            # Couche des étoiles (devant les planètes) avec variation de taille et luminosité
+            # Couche des étoiles (devant les planètes) avec couleurs stellaires réalistes
             self.stars_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+            # Couleurs basées sur la température stellaire (classification spectrale)
+            star_types = [
+                # (couleur_base, poids_distribution, tailles_possibles, poids_tailles)
+                ((200, 220, 255), 5, [2, 2, 3, 3], [20, 30, 30, 20]),   # Bleu (O/B/A) - rares, brillantes
+                ((255, 255, 255), 15, [1, 2, 2, 3], [30, 35, 25, 10]),  # Blanc (F) - assez communes
+                ((255, 255, 200), 20, [1, 1, 2, 2], [40, 30, 20, 10]),  # Jaune (G) - type solaire
+                ((255, 220, 180), 30, [1, 1, 1, 2], [50, 30, 15, 5]),   # Orange (K) - communes
+                ((255, 200, 180), 30, [1, 1, 1, 1], [60, 25, 10, 5]),   # Rouge (M) - naines rouges, très communes
+            ]
+
             for _ in range(150):
                 x = random.randint(0, SCREEN_WIDTH)
                 y = random.randint(0, SCREEN_HEIGHT)
-                # Variation de taille et luminosité pour plus de réalisme
-                size = random.choices([1, 1, 1, 2, 2, 3], weights=[40, 30, 15, 10, 4, 1])[0]
-                brightness = random.randint(150, 255)
-                star_color = (brightness, brightness, brightness)
+
+                # Choisir le type d'étoile selon la distribution réaliste
+                base_color, _, sizes, size_weights = random.choices(
+                    star_types,
+                    weights=[t[1] for t in star_types]
+                )[0]
+
+                # Taille corrélée au type (bleues plus grandes, rouges plus petites)
+                size = random.choices(sizes, weights=size_weights)[0]
+
+                # Variation de luminosité
+                brightness_factor = random.uniform(0.6, 1.0)
+                star_color = (
+                    int(base_color[0] * brightness_factor),
+                    int(base_color[1] * brightness_factor),
+                    int(base_color[2] * brightness_factor)
+                )
+
                 pygame.draw.circle(self.stars_layer, star_color, (x, y), size)
 
         self.y1 = 0
