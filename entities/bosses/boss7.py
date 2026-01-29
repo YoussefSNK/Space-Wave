@@ -5,7 +5,7 @@ import math
 from config import SCREEN_WIDTH
 from graphics.effects import Explosion
 from entities.enemy import Enemy
-from entities.projectiles import Boss7Projectile, EdgeRollerProjectile, BallBreakerProjectile
+from entities.projectiles import Boss7Projectile, EdgeRollerProjectile, BallBreakerProjectile, CurveStalkerProjectile
 
 
 class Boss7(Enemy):
@@ -24,6 +24,8 @@ class Boss7(Enemy):
         self.pattern_timer = 0
         self.pattern_duration = 360
         self.next_projectile_type = "ball_breaker"  # Commence avec Ball Breaker
+        self.projectile_cycle = ["ball_breaker", "edge_roller", "curve_stalker"]
+        self.projectile_index = 0
         self.is_dying = False
         self.death_timer = 0
         self.death_explosions = []
@@ -111,26 +113,38 @@ class Boss7(Enemy):
         self.shoot_count += 1
 
         if self.pattern == 0:
-            # Pattern 1: Alterne entre Ball Breaker et Edge Roller
+            # Pattern 1: Alterne entre Ball Breaker, Edge Roller et Curve Stalker
             # Lance 1 balle a la fois, position alternee
             angle = ((self.shoot_count - 1) % 2) * math.pi + self.timer * 0.05
             spawn_x = cx + int(math.cos(angle) * 50)
             spawn_y = cy + int(math.sin(angle) * 30) + 40
 
-            if self.next_projectile_type == "ball_breaker":
+            current_type = self.projectile_cycle[self.projectile_index]
+
+            if current_type == "ball_breaker":
                 proj = BallBreakerProjectile(
                     spawn_x, spawn_y,
                     player_pos[0], player_pos[1],
                     speed=8
                 )
-                self.next_projectile_type = "edge_roller"
-            else:
+            elif current_type == "edge_roller":
                 proj = EdgeRollerProjectile(
                     spawn_x, spawn_y,
                     player_pos[0], player_pos[1],
                     speed=9
                 )
-                self.next_projectile_type = "ball_breaker"
+            else:  # curve_stalker
+                # Determine le cote du spawn (gauche ou droite du boss)
+                side = "left" if spawn_x < cx else "right"
+                proj = CurveStalkerProjectile(
+                    spawn_x, spawn_y,
+                    self.rect.left, self.rect.right,
+                    side,
+                    speed=6
+                )
+
+            # Passer au type suivant dans le cycle
+            self.projectile_index = (self.projectile_index + 1) % len(self.projectile_cycle)
 
             projectiles_list.append(proj)
 

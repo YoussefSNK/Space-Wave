@@ -1269,3 +1269,374 @@ class EdgeRollerProjectile(EnemyProjectile):
         pygame.draw.circle(surface, color1, self.rect.center, 24)
         pygame.draw.circle(surface, color2, self.rect.center, 15)
         pygame.draw.circle(surface, WHITE, self.rect.center, 6)
+
+
+class CurveStalkerProjectile(EnemyProjectile):
+    """
+    Projectile special du Boss 7 - Curve Stalker
+    Comportement en 6 phases:
+    1. Trajectoire courbée vers le haut depuis un côté du boss
+    2. Descente verticale jusqu'au niveau Y du joueur
+    3. Demi-cercle dont la balle et le joueur forment les extrémités
+    4. Ligne droite vers le joueur (si mur touché en phase 3)
+    5. Monte vers le haut, puis retourne en phase 2 (ou sort si déjà fait)
+    6. Rebondit, courbe, puis fonce vers le joueur
+    """
+    # Phases du projectile
+    PHASE_CURVE_UP = 1
+    PHASE_DIVE = 2
+    PHASE_SEMICIRCLE = 3
+    PHASE_STRAIGHT = 4
+    PHASE_RISE = 5
+    PHASE_BOUNCE = 6
+
+    def __init__(self, x, y, boss_left, boss_right, side, speed=6):
+        """
+        x, y: position de spawn
+        boss_left, boss_right: côtés gauche et droit du boss
+        side: "left" ou "right" - côté depuis lequel la balle est tirée
+        """
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=15,
+            trail_color_func=lambda progress, alpha: (200, 100, 255, alpha),
+            trail_size_func=lambda progress: max(2, int(8 * progress))
+        )
+
+        self.image = pygame.Surface((36, 36), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (200, 100, 255), (18, 18), 18)
+        pygame.draw.circle(self.image, (230, 150, 255), (18, 18), 12)
+        pygame.draw.circle(self.image, WHITE, (18, 18), 5)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = 0
+        self.dy = 0
+        self.base_speed = speed
+        self.speed = speed
+        self.side = side  # "left" ou "right"
+
+        self.phase = self.PHASE_CURVE_UP
+        self.timer = 0
+        self.margin = 10
+
+        # Phase 1: Trajectoire courbée vers le haut
+        self.start_x = x
+        self.start_y = y
+        if side == "left":
+            # Cible: milieu entre bord gauche (0) et côté gauche du boss
+            self.target_x = boss_left / 2
+        else:
+            # Cible: milieu entre côté droit du boss et bord droit
+            self.target_x = boss_right + (SCREEN_WIDTH - boss_right) / 2
+        self.target_y = 0  # Bord du haut
+        self.curve_progress = 0
+        self.curve_duration = 60  # 1 seconde pour atteindre le haut
+
+        # Phase 2: Descente verticale
+        self.player_y_target = 0
+
+        # Phase 3: Demi-cercle
+        self.semicircle_center_x = 0
+        self.semicircle_center_y = 0
+        self.semicircle_radius = 0
+        self.semicircle_angle = 0
+        self.semicircle_direction = 1  # 1 = horaire, -1 = anti-horaire
+        self.semicircle_target_angle = 0
+        self.player_x_at_semicircle = 0
+
+        # Phase 4: Ligne droite vers le joueur
+        self.straight_target_x = 0
+        self.straight_target_y = 0
+
+        # Phase 5: Monte vers le haut
+        self.phase5_count = 0  # Nombre de fois en phase 5
+
+        # Phase 6: Rebond et courbe
+        self.bounce_timer = 0
+        self.bounce_direction_x = 0
+        self.bounce_direction_y = 0
+        self.phase6_subphase = 0  # 0: rebond, 1: courbe, 2: ligne droite
+        self.curve_start_x = 0
+        self.curve_start_y = 0
+        self.phase6_player_x = 0
+        self.phase6_player_y = 0
+
+    def update(self, player_position=None):
+        self.update_trail()
+        self.timer += 1
+
+        if self.phase == self.PHASE_CURVE_UP:
+            self._update_curve_up()
+        elif self.phase == self.PHASE_DIVE:
+            self._update_dive(player_position)
+        elif self.phase == self.PHASE_SEMICIRCLE:
+            self._update_semicircle(player_position)
+        elif self.phase == self.PHASE_STRAIGHT:
+            self._update_straight()
+        elif self.phase == self.PHASE_RISE:
+            self._update_rise()
+        elif self.phase == self.PHASE_BOUNCE:
+            self._update_bounce(player_position)
+
+    def _update_curve_up(self):
+        """Phase 1: Trajectoire courbée vers le haut"""
+        self.curve_progress += 1 / self.curve_duration
+
+        if self.curve_progress >= 1.0:
+            self.curve_progress = 1.0
+            # Passer en phase 2
+            self.phase = self.PHASE_DIVE
+            self.rect.centery = self.margin + 18  # Juste en dessous du bord
+            return
+
+        # Courbe de Bézier quadratique pour une trajectoire fluide
+        t = self.curve_progress
+        # Point de contrôle au milieu en hauteur, décalé horizontalement
+        if self.side == "left":
+            control_x = self.start_x - 50
+        else:
+            control_x = self.start_x + 50
+        control_y = self.start_y / 2
+
+        # Formule de Bézier quadratique: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+        new_x = (1-t)**2 * self.start_x + 2*(1-t)*t * control_x + t**2 * self.target_x
+        new_y = (1-t)**2 * self.start_y + 2*(1-t)*t * control_y + t**2 * self.target_y
+
+        self.rect.centerx = int(new_x)
+        self.rect.centery = int(new_y)
+
+    def _update_dive(self, player_position):
+        """Phase 2: Descente verticale jusqu'au niveau Y du joueur"""
+        self.rect.y += self.speed
+
+        if player_position:
+            self.player_y_target = player_position[1]
+            self.player_x_at_semicircle = player_position[0]
+
+            # Atteint le niveau Y du joueur
+            if self.rect.centery >= self.player_y_target:
+                self._start_semicircle(player_position)
+
+    def _start_semicircle(self, player_position):
+        """Initialise la phase 3: demi-cercle"""
+        self.phase = self.PHASE_SEMICIRCLE
+
+        # Le centre du cercle est au milieu entre la balle et le joueur
+        self.semicircle_center_x = (self.rect.centerx + player_position[0]) / 2
+        self.semicircle_center_y = self.rect.centery  # Même niveau Y
+
+        # Rayon = moitié de la distance entre la balle et le joueur
+        self.semicircle_radius = abs(self.rect.centerx - player_position[0]) / 2
+
+        # Angle initial (la balle est sur le cercle)
+        if self.rect.centerx < player_position[0]:
+            # Balle à gauche du joueur -> angle = π (180°)
+            self.semicircle_angle = math.pi
+            # Anti-horaire pour passer par le bas
+            self.semicircle_direction = -1
+            self.semicircle_target_angle = 0  # Cible: 0° (côté droit)
+        else:
+            # Balle à droite du joueur -> angle = 0
+            self.semicircle_angle = 0
+            # Horaire pour passer par le bas
+            self.semicircle_direction = 1
+            self.semicircle_target_angle = math.pi  # Cible: 180° (côté gauche)
+
+        self.player_x_at_semicircle = player_position[0]
+
+    def _update_semicircle(self, player_position):
+        """Phase 3: Suit un demi-cercle en passant par le bas"""
+        if self.semicircle_radius < 10:
+            # Rayon trop petit, passer directement en phase 5
+            self.phase = self.PHASE_RISE
+            return
+
+        # Vitesse angulaire proportionnelle à la vitesse linéaire
+        angular_speed = self.speed / max(1, self.semicircle_radius) * 0.8
+
+        # Avancer sur le cercle
+        self.semicircle_angle += angular_speed * self.semicircle_direction
+
+        # Calculer la nouvelle position
+        new_x = self.semicircle_center_x + math.cos(self.semicircle_angle) * self.semicircle_radius
+        new_y = self.semicircle_center_y + math.sin(self.semicircle_angle) * self.semicircle_radius
+
+        self.rect.centerx = int(new_x)
+        self.rect.centery = int(new_y)
+
+        # Vérifier si on touche un mur (gauche, droite ou bas) -> Phase 4
+        if self.rect.left <= self.margin:
+            # Repositionner la balle à l'intérieur de l'écran
+            self.rect.left = self.margin + 1
+            if player_position:
+                self.straight_target_x = player_position[0]
+                self.straight_target_y = player_position[1]
+            self._start_straight()
+            return
+        elif self.rect.right >= SCREEN_WIDTH - self.margin:
+            # Repositionner la balle à l'intérieur de l'écran
+            self.rect.right = SCREEN_WIDTH - self.margin - 1
+            if player_position:
+                self.straight_target_x = player_position[0]
+                self.straight_target_y = player_position[1]
+            self._start_straight()
+            return
+        elif self.rect.bottom >= SCREEN_HEIGHT - self.margin:
+            # Repositionner la balle à l'intérieur de l'écran
+            self.rect.bottom = SCREEN_HEIGHT - self.margin - 1
+            if player_position:
+                self.straight_target_x = player_position[0]
+                self.straight_target_y = player_position[1]
+            self._start_straight()
+            return
+
+        # Vérifier si on a atteint le côté opposé (demi-cercle complet)
+        if self.semicircle_direction == -1:
+            # Anti-horaire: on a commencé à π, on vise 0 (en passant par -π/2)
+            # Donc on vérifie si l'angle est passé sous 0
+            if self.semicircle_angle <= 0:
+                self.phase = self.PHASE_RISE
+        else:
+            # Horaire: on a commencé à 0, on vise π (en passant par π/2)
+            # Donc on vérifie si l'angle dépasse π
+            if self.semicircle_angle >= math.pi:
+                self.phase = self.PHASE_RISE
+
+    def _start_straight(self):
+        """Initialise la phase 4: ligne droite vers le joueur"""
+        self.phase = self.PHASE_STRAIGHT
+
+        # Calculer la direction vers le joueur
+        dx = self.straight_target_x - self.rect.centerx
+        dy = self.straight_target_y - self.rect.centery
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0:
+            self.dx = dx / dist
+            self.dy = dy / dist
+        else:
+            self.dx = 0
+            self.dy = 1
+
+    def _update_straight(self):
+        """Phase 4: Fonce en ligne droite"""
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+        # Vérifier si on touche un bord -> Phase 6
+        if (self.rect.left <= self.margin or self.rect.right >= SCREEN_WIDTH - self.margin or
+            self.rect.top <= self.margin or self.rect.bottom >= SCREEN_HEIGHT - self.margin):
+            self._start_bounce()
+
+    def _start_bounce(self):
+        """Initialise la phase 6: rebond"""
+        self.phase = self.PHASE_BOUNCE
+        self.bounce_timer = 0
+        self.phase6_subphase = 0
+
+        # Calculer la direction de rebond physique
+        if self.rect.left <= self.margin or self.rect.right >= SCREEN_WIDTH - self.margin:
+            self.bounce_direction_x = -self.dx
+            self.bounce_direction_y = self.dy
+        else:
+            self.bounce_direction_x = self.dx
+            self.bounce_direction_y = -self.dy
+
+        # Normaliser
+        dist = math.sqrt(self.bounce_direction_x**2 + self.bounce_direction_y**2)
+        if dist > 0:
+            self.bounce_direction_x /= dist
+            self.bounce_direction_y /= dist
+
+        self.dx = self.bounce_direction_x
+        self.dy = self.bounce_direction_y
+
+    def _update_rise(self):
+        """Phase 5: Monte vers le haut"""
+        self.rect.y -= self.speed
+
+        # Si on touche le bord du haut
+        if self.rect.top <= self.margin:
+            self.phase5_count += 1
+
+            if self.phase5_count >= 2:
+                # Déjà passé en phase 5 une fois -> sort de l'écran
+                pass  # Continue de monter et sortira
+            else:
+                # Retourne en phase 2 mais 2x plus rapide
+                self.phase = self.PHASE_DIVE
+                self.speed = self.base_speed * 2
+                self.rect.centery = self.margin + 18
+
+    def _update_bounce(self, player_position):
+        """Phase 6: Rebond, courbe, puis ligne droite"""
+        self.bounce_timer += 1
+
+        if self.phase6_subphase == 0:
+            # Sous-phase 0: Rebond en ligne droite (0.5 secondes = 30 frames)
+            self.rect.x += int(self.dx * self.speed)
+            self.rect.y += int(self.dy * self.speed)
+
+            if self.bounce_timer >= 30:
+                self.phase6_subphase = 1
+                self.bounce_timer = 0
+                self.curve_start_x = self.rect.centerx
+                self.curve_start_y = self.rect.centery
+                if player_position:
+                    self.phase6_player_x = player_position[0]
+                    self.phase6_player_y = player_position[1]
+
+        elif self.phase6_subphase == 1:
+            # Sous-phase 1: Trajectoire courbée (0.5 secondes = 30 frames)
+            t = self.bounce_timer / 30
+
+            # Point de contrôle pour la courbe
+            control_x = (self.curve_start_x + self.phase6_player_x) / 2
+            control_y = self.curve_start_y + 100  # Décalé vers le bas pour une belle courbe
+
+            # Bézier quadratique vers une position intermédiaire
+            mid_x = self.curve_start_x + (self.phase6_player_x - self.curve_start_x) * 0.5
+            mid_y = self.curve_start_y + (self.phase6_player_y - self.curve_start_y) * 0.3
+
+            new_x = (1-t)**2 * self.curve_start_x + 2*(1-t)*t * control_x + t**2 * mid_x
+            new_y = (1-t)**2 * self.curve_start_y + 2*(1-t)*t * control_y + t**2 * mid_y
+
+            self.rect.centerx = int(new_x)
+            self.rect.centery = int(new_y)
+
+            if self.bounce_timer >= 30:
+                self.phase6_subphase = 2
+                # Calculer la direction vers le joueur actuel
+                if player_position:
+                    self.phase6_player_x = player_position[0]
+                    self.phase6_player_y = player_position[1]
+                dx = self.phase6_player_x - self.rect.centerx
+                dy = self.phase6_player_y - self.rect.centery
+                dist = math.sqrt(dx*dx + dy*dy)
+                if dist > 0:
+                    self.dx = dx / dist
+                    self.dy = dy / dist
+
+        else:
+            # Sous-phase 2: Ligne droite vers le joueur
+            self.rect.x += int(self.dx * self.speed)
+            self.rect.y += int(self.dy * self.speed)
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+
+        # Couleur varie selon la phase
+        if self.phase == self.PHASE_CURVE_UP:
+            color1, color2 = (200, 100, 255), (230, 150, 255)
+        elif self.phase == self.PHASE_DIVE:
+            color1, color2 = (150, 100, 255), (200, 150, 255)
+        elif self.phase == self.PHASE_SEMICIRCLE:
+            color1, color2 = (255, 100, 200), (255, 150, 230)
+        elif self.phase == self.PHASE_STRAIGHT:
+            color1, color2 = (255, 150, 100), (255, 200, 150)
+        elif self.phase == self.PHASE_RISE:
+            color1, color2 = (100, 200, 255), (150, 230, 255)
+        else:  # PHASE_BOUNCE
+            color1, color2 = (255, 100, 100), (255, 150, 150)
+
+        pygame.draw.circle(surface, color1, self.rect.center, 18)
+        pygame.draw.circle(surface, color2, self.rect.center, 12)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 5)
