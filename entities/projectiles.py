@@ -1290,7 +1290,7 @@ class CurveStalkerProjectile(EnemyProjectile):
     PHASE_RISE = 5
     PHASE_BOUNCE = 6
 
-    def __init__(self, x, y, boss_left, boss_right, side, speed=6.5):
+    def __init__(self, x, y, boss_left, boss_right, side, speed=9.0):
         """
         x, y: position de spawn
         boss_left, boss_right: côtés gauche et droit du boss
@@ -1329,7 +1329,7 @@ class CurveStalkerProjectile(EnemyProjectile):
             self.target_x = boss_right + (SCREEN_WIDTH - boss_right) / 2
         self.target_y = 0  # Bord du haut
         self.curve_progress = 0
-        self.curve_duration = 60  # 1 seconde pour atteindre le haut
+        self.curve_duration = 40  # 0.67 seconde pour atteindre le haut (réduit de 60 pour plus de vitesse)
 
         # Phase 2: Descente verticale
         self.player_y_target = 0
@@ -1451,7 +1451,7 @@ class CurveStalkerProjectile(EnemyProjectile):
             return
 
         # Vitesse angulaire proportionnelle à la vitesse linéaire
-        angular_speed = self.speed / max(1, self.semicircle_radius) * 0.8
+        angular_speed = self.speed / max(1, self.semicircle_radius) * 1.2
 
         # Avancer sur le cercle
         self.semicircle_angle += angular_speed * self.semicircle_direction
@@ -1571,11 +1571,11 @@ class CurveStalkerProjectile(EnemyProjectile):
         self.bounce_timer += 1
 
         if self.phase6_subphase == 0:
-            # Sous-phase 0: Rebond en ligne droite (0.5 secondes = 30 frames)
+            # Sous-phase 0: Rebond en ligne droite (0.33 secondes = 20 frames)
             self.rect.x += int(self.dx * self.speed)
             self.rect.y += int(self.dy * self.speed)
 
-            if self.bounce_timer >= 30:
+            if self.bounce_timer >= 20:
                 self.phase6_subphase = 1
                 self.bounce_timer = 0
                 self.curve_start_x = self.rect.centerx
@@ -1585,8 +1585,8 @@ class CurveStalkerProjectile(EnemyProjectile):
                     self.phase6_player_y = player_position[1]
 
         elif self.phase6_subphase == 1:
-            # Sous-phase 1: Trajectoire courbée (0.5 secondes = 30 frames)
-            t = self.bounce_timer / 30
+            # Sous-phase 1: Trajectoire courbée (0.33 secondes = 20 frames)
+            t = self.bounce_timer / 20
 
             # Point de contrôle pour la courbe
             control_x = (self.curve_start_x + self.phase6_player_x) / 2
@@ -1602,7 +1602,7 @@ class CurveStalkerProjectile(EnemyProjectile):
             self.rect.centerx = int(new_x)
             self.rect.centery = int(new_y)
 
-            if self.bounce_timer >= 30:
+            if self.bounce_timer >= 20:
                 self.phase6_subphase = 2
                 # Calculer la direction vers le joueur actuel
                 if player_position:
