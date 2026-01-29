@@ -140,7 +140,7 @@ class Boss7(Enemy):
                     spawn_x, spawn_y,
                     self.rect.left, self.rect.right,
                     side,
-                    speed=6
+                    speed=6.5
                 )
 
             # Passer au type suivant dans le cycle

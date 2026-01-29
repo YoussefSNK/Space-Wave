@@ -1290,7 +1290,7 @@ class CurveStalkerProjectile(EnemyProjectile):
     PHASE_RISE = 5
     PHASE_BOUNCE = 6
 
-    def __init__(self, x, y, boss_left, boss_right, side, speed=6):
+    def __init__(self, x, y, boss_left, boss_right, side, speed=6.5):
         """
         x, y: position de spawn
         boss_left, boss_right: côtés gauche et droit du boss
@@ -1303,10 +1303,10 @@ class CurveStalkerProjectile(EnemyProjectile):
             trail_size_func=lambda progress: max(2, int(8 * progress))
         )
 
-        self.image = pygame.Surface((36, 36), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, (200, 100, 255), (18, 18), 18)
-        pygame.draw.circle(self.image, (230, 150, 255), (18, 18), 12)
-        pygame.draw.circle(self.image, WHITE, (18, 18), 5)
+        self.image = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (200, 100, 255), (24, 24), 24)
+        pygame.draw.circle(self.image, (230, 150, 255), (24, 24), 16)
+        pygame.draw.circle(self.image, WHITE, (24, 24), 6)
         self.rect = self.image.get_rect(center=(x, y))
         self.dx = 0
         self.dy = 0
@@ -1385,7 +1385,7 @@ class CurveStalkerProjectile(EnemyProjectile):
             self.curve_progress = 1.0
             # Passer en phase 2
             self.phase = self.PHASE_DIVE
-            self.rect.centery = self.margin + 18  # Juste en dessous du bord
+            self.rect.centery = self.margin + 24  # Juste en dessous du bord
             return
 
         # Courbe de Bézier quadratique pour une trajectoire fluide
@@ -1564,7 +1564,7 @@ class CurveStalkerProjectile(EnemyProjectile):
                 # Retourne en phase 2 mais 2x plus rapide
                 self.phase = self.PHASE_DIVE
                 self.speed = self.base_speed * 2
-                self.rect.centery = self.margin + 18
+                self.rect.centery = self.margin + 24
 
     def _update_bounce(self, player_position):
         """Phase 6: Rebond, courbe, puis ligne droite"""
@@ -1637,6 +1637,6 @@ class CurveStalkerProjectile(EnemyProjectile):
         else:  # PHASE_BOUNCE
             color1, color2 = (255, 100, 100), (255, 150, 150)
 
-        pygame.draw.circle(surface, color1, self.rect.center, 18)
-        pygame.draw.circle(surface, color2, self.rect.center, 12)
-        pygame.draw.circle(surface, WHITE, self.rect.center, 5)
+        pygame.draw.circle(surface, color1, self.rect.center, 24)
+        pygame.draw.circle(surface, color2, self.rect.center, 16)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 6)
