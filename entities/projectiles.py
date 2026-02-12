@@ -1641,3 +1641,194 @@ class CurveStalkerProjectile(EnemyProjectile):
         pygame.draw.circle(surface, color1, self.rect.center, 24)
         pygame.draw.circle(surface, color2, self.rect.center, 16)
         pygame.draw.circle(surface, WHITE, self.rect.center, 6)
+
+
+class Boss8Projectile(EnemyProjectile):
+    """Projectile du Boss 8 - cristal bleu/cyan prismatique"""
+    def __init__(self, x, y, dx, dy, speed=5):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=10,
+            trail_color_func=lambda progress, alpha: (100, int(200 * progress), 255, alpha),
+            trail_size_func=lambda progress: max(2, int(6 * progress))
+        )
+        self.image = pygame.Surface((14, 14), pygame.SRCALPHA)
+        # Forme de losange/cristal
+        points = [(7, 0), (14, 7), (7, 14), (0, 7)]
+        pygame.draw.polygon(self.image, (80, 180, 255), points)
+        pygame.draw.polygon(self.image, (150, 220, 255), points, 2)
+        pygame.draw.circle(self.image, WHITE, (7, 7), 3)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.timer = 0
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        # Effet de scintillement
+        pulse = abs(math.sin(self.timer * 0.15)) * 2
+        pygame.draw.circle(surface, (100, 200, 255), self.rect.center, int(7 + pulse))
+        pygame.draw.circle(surface, (180, 230, 255), self.rect.center, 4)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class CrystalShardProjectile(EnemyProjectile):
+    """Fragment de cristal pointu du Boss 8"""
+    def __init__(self, x, y, dx, dy, speed=5):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=8,
+            trail_color_func=lambda progress, alpha: (150, int(180 * progress), 255, alpha),
+            trail_size_func=lambda progress: max(2, int(5 * progress))
+        )
+        self.image = pygame.Surface((12, 18), pygame.SRCALPHA)
+        # Triangle pointu (fragment de cristal)
+        points = [(6, 0), (12, 18), (0, 18)]
+        pygame.draw.polygon(self.image, (120, 160, 220), points)
+        pygame.draw.polygon(self.image, (180, 210, 255), points, 2)
+        # Reflet
+        pygame.draw.line(self.image, (220, 240, 255), (6, 2), (4, 10), 1)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.rotation = 0
+        self.rotation_speed = random.uniform(5, 15) * (1 if random.random() > 0.5 else -1)
+
+    def update(self):
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+        self.rotation += self.rotation_speed
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        # Dessiner avec rotation
+        rotated = pygame.transform.rotate(self.image, self.rotation)
+        rotated_rect = rotated.get_rect(center=self.rect.center)
+        surface.blit(rotated, rotated_rect)
+
+
+class PrismBeamProjectile(EnemyProjectile):
+    """Rayon prismatique arc-en-ciel du Boss 8"""
+    def __init__(self, x, y, dx, dy, speed=6):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=15,
+            trail_color_func=lambda progress, alpha: (
+                int(127 + 127 * math.sin(progress * 6)),
+                int(127 + 127 * math.sin(progress * 6 + 2)),
+                int(127 + 127 * math.sin(progress * 6 + 4)),
+                alpha
+            ),
+            trail_size_func=lambda progress: max(3, int(8 * progress))
+        )
+        self.image = pygame.Surface((16, 16), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (255, 200, 200), (8, 8), 8)
+        pygame.draw.circle(self.image, WHITE, (8, 8), 4)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.timer = 0
+        self.color_phase = random.uniform(0, 2 * math.pi)
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def _get_rainbow_color(self):
+        """Couleur arc-en-ciel cyclique"""
+        hue = self.timer * 0.1 + self.color_phase
+        r = int(127 + 127 * math.sin(hue))
+        g = int(127 + 127 * math.sin(hue + 2 * math.pi / 3))
+        b = int(127 + 127 * math.sin(hue + 4 * math.pi / 3))
+        return (r, g, b)
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        color = self._get_rainbow_color()
+        pygame.draw.circle(surface, color, self.rect.center, 8)
+        lighter = (min(255, color[0] + 80), min(255, color[1] + 80), min(255, color[2] + 80))
+        pygame.draw.circle(surface, lighter, self.rect.center, 5)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class ReflectingProjectile(EnemyProjectile):
+    """Projectile qui rebondit sur les murs avec effet cristallin"""
+    def __init__(self, x, y, dx, dy, speed=5, reflections=3):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=12,
+            trail_color_func=lambda progress, alpha: (200, int(150 * progress), 255, alpha),
+            trail_size_func=lambda progress: max(2, int(6 * progress))
+        )
+        self.image = pygame.Surface((14, 14), pygame.SRCALPHA)
+        # Hexagone (cristal)
+        hex_points = []
+        for i in range(6):
+            angle = math.radians(60 * i - 30)
+            hx = 7 + math.cos(angle) * 6
+            hy = 7 + math.sin(angle) * 6
+            hex_points.append((hx, hy))
+        pygame.draw.polygon(self.image, (180, 120, 255), hex_points)
+        pygame.draw.polygon(self.image, (220, 180, 255), hex_points, 2)
+        pygame.draw.circle(self.image, WHITE, (7, 7), 2)
+        self.rect = self.image.get_rect(center=(x, y))
+        # Normaliser la direction
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0:
+            self.dx = dx / dist
+            self.dy = dy / dist
+        else:
+            self.dx = 0
+            self.dy = 1
+        self.speed = speed
+        self.reflections_left = reflections
+        self.timer = 0
+        self.margin = 10
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+        # Rebonds sur les bords
+        if self.reflections_left > 0:
+            bounced = False
+            if self.rect.left <= self.margin:
+                self.rect.left = self.margin
+                self.dx = abs(self.dx)
+                bounced = True
+            elif self.rect.right >= SCREEN_WIDTH - self.margin:
+                self.rect.right = SCREEN_WIDTH - self.margin
+                self.dx = -abs(self.dx)
+                bounced = True
+
+            if self.rect.top <= self.margin:
+                self.rect.top = self.margin
+                self.dy = abs(self.dy)
+                bounced = True
+
+            if bounced:
+                self.reflections_left -= 1
+                self.trail.clear()  # Effet visuel de "téléportation" au rebond
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        # Couleur change selon les rebonds restants
+        intensity = 150 + self.reflections_left * 35
+        color = (min(255, intensity), 120, 255)
+        pygame.draw.circle(surface, color, self.rect.center, 7)
+        pygame.draw.circle(surface, (220, 180, 255), self.rect.center, 4)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
