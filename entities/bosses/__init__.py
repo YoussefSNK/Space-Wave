@@ -6,3 +6,4 @@ from .boss5 import Boss5
 from .boss6 import Boss6
 from .boss7 import Boss7
 from .boss8 import Boss8
+from .boss9 import Boss9

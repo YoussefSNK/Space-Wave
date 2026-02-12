@@ -1832,3 +1832,293 @@ class ReflectingProjectile(EnemyProjectile):
         pygame.draw.circle(surface, color, self.rect.center, 7)
         pygame.draw.circle(surface, (220, 180, 255), self.rect.center, 4)
         pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+# ============================================================
+# PROJECTILES DU BOSS 9 - VOID PHOENIX
+# ============================================================
+
+class Boss9Projectile(EnemyProjectile):
+    """Projectile du Boss 9 - flamme void violette/noire"""
+    def __init__(self, x, y, dx, dy, speed=5):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=12,
+            trail_color_func=lambda progress, alpha: (int(150 * progress), int(50 * progress), int(200 * progress), alpha),
+            trail_size_func=lambda progress: max(2, int(7 * progress))
+        )
+        self.image = pygame.Surface((16, 16), pygame.SRCALPHA)
+        # Forme de flamme
+        pygame.draw.circle(self.image, (100, 40, 160), (8, 8), 8)
+        pygame.draw.circle(self.image, (150, 80, 200), (8, 8), 5)
+        pygame.draw.circle(self.image, (200, 150, 255), (8, 8), 2)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.timer = 0
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        # Effet de pulsation
+        pulse = abs(math.sin(self.timer * 0.2)) * 3
+        pygame.draw.circle(surface, (120, 50, 180), self.rect.center, int(8 + pulse))
+        pygame.draw.circle(surface, (180, 100, 220), self.rect.center, 5)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class VoidFeatherProjectile(EnemyProjectile):
+    """Plume void du Boss 9 - tourne en tombant"""
+    def __init__(self, x, y, dx, dy, speed=5):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=10,
+            trail_color_func=lambda progress, alpha: (int(180 * progress), int(100 * progress), int(255 * progress), alpha),
+            trail_size_func=lambda progress: max(2, int(5 * progress))
+        )
+        self.base_image = pygame.Surface((14, 22), pygame.SRCALPHA)
+        # Forme de plume elegante
+        points = [
+            (7, 0),      # Pointe haute
+            (12, 8),     # Cote droit haut
+            (10, 18),    # Cote droit bas
+            (7, 22),     # Pointe basse
+            (4, 18),     # Cote gauche bas
+            (2, 8)       # Cote gauche haut
+        ]
+        pygame.draw.polygon(self.base_image, (140, 70, 200), points)
+        pygame.draw.polygon(self.base_image, (200, 150, 255), points, 2)
+        # Ligne centrale de la plume
+        pygame.draw.line(self.base_image, (220, 180, 255), (7, 2), (7, 20), 1)
+
+        self.image = self.base_image.copy()
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.rotation = 0
+        self.rotation_speed = random.uniform(3, 8) * (1 if random.random() > 0.5 else -1)
+        self.wobble_timer = random.uniform(0, math.pi * 2)
+        self.wobble_amplitude = random.uniform(0.5, 1.5)
+
+    def update(self):
+        self.update_trail()
+        self.wobble_timer += 0.1
+
+        # Mouvement ondulant horizontal
+        wobble_x = math.sin(self.wobble_timer) * self.wobble_amplitude
+
+        self.rect.x += int((self.dx + wobble_x) * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+        self.rotation += self.rotation_speed
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        rotated = pygame.transform.rotate(self.base_image, self.rotation)
+        rotated_rect = rotated.get_rect(center=self.rect.center)
+        surface.blit(rotated, rotated_rect)
+
+
+class SoulFireProjectile(EnemyProjectile):
+    """Flamme d'ame du Boss 9 - change de couleur en volant"""
+    def __init__(self, x, y, dx, dy, speed=6):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=15,
+            trail_color_func=lambda progress, alpha: (
+                int(200 + 55 * progress),
+                int(100 * progress),
+                int(150 + 100 * progress),
+                alpha
+            ),
+            trail_size_func=lambda progress: max(3, int(8 * progress))
+        )
+        self.image = pygame.Surface((18, 18), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = dx
+        self.dy = dy
+        self.speed = speed
+        self.timer = 0
+        self.color_phase = random.uniform(0, 2 * math.pi)
+
+    def _get_flame_color(self):
+        """Couleur de flamme qui pulse entre violet et orange"""
+        phase = self.timer * 0.15 + self.color_phase
+        # Interpole entre violet (150, 50, 200) et orange (255, 150, 50)
+        t = (math.sin(phase) + 1) / 2
+        r = int(150 + (255 - 150) * t)
+        g = int(50 + (150 - 50) * t)
+        b = int(200 + (50 - 200) * t)
+        return (r, g, b)
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        color = self._get_flame_color()
+
+        # Forme de flamme avec plusieurs cercles
+        pulse = abs(math.sin(self.timer * 0.2)) * 4
+
+        # Flamme exterieure
+        pygame.draw.circle(surface, color, self.rect.center, int(9 + pulse))
+
+        # Coeur plus clair
+        lighter = (min(255, color[0] + 60), min(255, color[1] + 60), min(255, color[2] + 60))
+        pygame.draw.circle(surface, lighter, self.rect.center, 5)
+
+        # Centre blanc
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class AnnihilationOrbProjectile(EnemyProjectile):
+    """Orbe d'annihilation du Boss 9 - gros, lent, et menacant"""
+    def __init__(self, x, y, dx, dy, speed=3):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=20,
+            trail_color_func=lambda progress, alpha: (int(100 * progress), int(30 * progress), int(150 * progress), int(alpha * 0.7)),
+            trail_size_func=lambda progress: max(5, int(18 * progress))
+        )
+        self.image = pygame.Surface((40, 40), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(center=(x, y))
+        # Normaliser la direction
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0:
+            self.dx = dx / dist
+            self.dy = dy / dist
+        else:
+            self.dx = 0
+            self.dy = 1
+        self.speed = speed
+        self.timer = 0
+        self.core_rotation = 0
+        self.outer_rotation = 0
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+        self.rect.x += int(self.dx * self.speed)
+        self.rect.y += int(self.dy * self.speed)
+        self.core_rotation += 3
+        self.outer_rotation -= 2
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+
+        # Aura exterieure pulsante
+        pulse = abs(math.sin(self.timer * 0.1)) * 5
+        aura_size = int(25 + pulse)
+        aura_surf = pygame.Surface((aura_size * 2 + 10, aura_size * 2 + 10), pygame.SRCALPHA)
+        aura_alpha = int(80 + 40 * abs(math.sin(self.timer * 0.08)))
+        pygame.draw.circle(aura_surf, (80, 30, 120, aura_alpha),
+                          (aura_size + 5, aura_size + 5), aura_size)
+        surface.blit(aura_surf, (self.rect.centerx - aura_size - 5,
+                                 self.rect.centery - aura_size - 5))
+
+        # Anneau exterieur tournant
+        for i in range(6):
+            angle = math.radians(self.outer_rotation + i * 60)
+            ox = self.rect.centerx + math.cos(angle) * 18
+            oy = self.rect.centery + math.sin(angle) * 18
+            pygame.draw.circle(surface, (150, 80, 200), (int(ox), int(oy)), 4)
+
+        # Corps principal
+        pygame.draw.circle(surface, (60, 20, 100), self.rect.center, 16)
+        pygame.draw.circle(surface, (100, 50, 150), self.rect.center, 12)
+
+        # Motif interne tournant
+        for i in range(4):
+            angle = math.radians(self.core_rotation + i * 90)
+            ix = self.rect.centerx + math.cos(angle) * 6
+            iy = self.rect.centery + math.sin(angle) * 6
+            pygame.draw.circle(surface, (180, 120, 220), (int(ix), int(iy)), 3)
+
+        # Noyau brillant
+        core_pulse = abs(math.sin(self.timer * 0.15)) * 2
+        pygame.draw.circle(surface, (200, 150, 255), self.rect.center, int(5 + core_pulse))
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
+class PhoenixWaveProjectile(EnemyProjectile):
+    """Onde de phoenix du Boss 9 - onde expansive en forme d'aile"""
+    def __init__(self, x, y, speed=4):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=0,
+            trail_color_func=lambda progress, alpha: (0, 0, 0, 0),
+            trail_size_func=lambda progress: 0
+        )
+        self.center = (x, y)
+        self.radius = 20
+        self.max_radius = 350
+        self.thickness = 12
+        self.image = pygame.Surface((self.max_radius * 2, self.max_radius * 2), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = 0
+        self.dy = 0
+        self.speed = speed
+        self.timer = 0
+
+    def update(self):
+        self.timer += 1
+        self.radius += self.speed
+        # Update rect pour la collision
+        self.rect = pygame.Rect(
+            self.center[0] - self.radius,
+            self.center[1] - self.radius,
+            self.radius * 2,
+            self.radius * 2
+        )
+
+    def is_expired(self):
+        return self.radius >= self.max_radius
+
+    def check_collision(self, other_rect):
+        """Collision speciale pour l'anneau"""
+        dx = other_rect.centerx - self.center[0]
+        dy = other_rect.centery - self.center[1]
+        dist = math.sqrt(dx*dx + dy*dy)
+        return abs(dist - self.radius) < self.thickness + 15
+
+    def draw(self, surface):
+        # Calcul de l'opacite (clamped entre 0 et 255)
+        progress = min(1.0, self.radius / self.max_radius)
+        base_alpha = max(0, min(255, int(200 * (1 - progress))))
+
+        if base_alpha <= 0:
+            return
+
+        wave_surf = pygame.Surface((int(self.radius * 2 + 30), int(self.radius * 2 + 30)), pygame.SRCALPHA)
+
+        # Onde principale violette
+        pygame.draw.circle(wave_surf, (150, 80, 220, base_alpha),
+                          (int(self.radius + 15), int(self.radius + 15)), int(self.radius), self.thickness)
+
+        # Onde interieure plus claire
+        if self.radius > 15:
+            inner_alpha = max(0, min(255, int(base_alpha * 0.6)))
+            pygame.draw.circle(wave_surf, (200, 150, 255, inner_alpha),
+                              (int(self.radius + 15), int(self.radius + 15)), int(self.radius - 8), 4)
+
+        # Particules sur l'onde
+        num_particles = 12
+        for i in range(num_particles):
+            angle = (2 * math.pi / num_particles) * i + self.timer * 0.1
+            px = self.radius + 15 + math.cos(angle) * self.radius
+            py = self.radius + 15 + math.sin(angle) * self.radius
+            particle_alpha = max(0, min(255, int(base_alpha * 0.8)))
+            pygame.draw.circle(wave_surf, (220, 180, 255, particle_alpha), (int(px), int(py)), 4)
+
+        surface.blit(wave_surf, (int(self.center[0] - self.radius - 15),
+                                  int(self.center[1] - self.radius - 15)))

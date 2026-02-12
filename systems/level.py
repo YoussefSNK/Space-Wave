@@ -7,7 +7,7 @@ from entities.enemy import (
     SineWaveEnemy, ZigZagEnemy, SwoopEnemy, HorizontalEnemy,
     ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
 )
-from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8
+from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9
 from systems.movement_patterns import (
     SineWavePattern, ZigZagPattern, SwoopPattern, HorizontalWavePattern
 )
@@ -65,6 +65,11 @@ class Level:
         self.boss7_defeat_timer = 0
         self.boss8_spawn_delay = 600
         self.boss8_spawned = False
+
+        self.boss8_defeated = False
+        self.boss8_defeat_timer = 0
+        self.boss9_spawn_delay = 600
+        self.boss9_spawned = False
 
         # Spawns d'ennemis post-boss1 (nouveaux ennemis)
         self.post_boss1_spawn_events = []
@@ -130,6 +135,12 @@ class Level:
         self.enemies.append(boss8)
         self.boss8_spawned = True
         print(f'Spawned Boss 8 at timer {self.timer}')
+
+    def spawn_boss9(self):
+        boss9 = Boss9(SCREEN_WIDTH // 2, -130)
+        self.enemies.append(boss9)
+        self.boss9_spawned = True
+        print(f'Spawned Boss 9 at timer {self.timer}')
 
     def spawn_formation_v(self, count):
         """Spawn des ennemis en formation V"""
@@ -285,9 +296,9 @@ class Level:
         for event in events_to_remove:
             self.spawn_events.remove(event)
         for enemy in self.enemies:
-            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+            if not isinstance(enemy, (ShootingEnemy, Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                 enemy.update()
-        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)))]
+        self.enemies = [e for e in self.enemies if (e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)))]
 
         # Gestion du spawn du Boss 2 apres defaite du Boss 1
         if self.boss1_defeated and not self.boss2_spawned:
@@ -344,7 +355,13 @@ class Level:
             if self.boss7_defeat_timer >= self.boss8_spawn_delay:
                 self.spawn_boss8()
 
-        if any(isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)) for enemy in self.enemies):
+        # Gestion du spawn du Boss 9 apres defaite du Boss 8
+        if self.boss8_defeated and not self.boss9_spawned:
+            self.boss8_defeat_timer += 1
+            if self.boss8_defeat_timer >= self.boss9_spawn_delay:
+                self.spawn_boss9()
+
+        if any(isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)) for enemy in self.enemies):
             if self.background.speed > 0:
                 self.background.speed = max(self.background.speed - 0.05, 0)
         else:

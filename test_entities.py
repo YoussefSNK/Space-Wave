@@ -18,7 +18,7 @@ from entities.projectiles import (
 )
 from entities.powerup import PowerUp
 from entities.enemy import Enemy, ShootingEnemy
-from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8
+from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9
 from graphics.background import Background
 from graphics.effects import Explosion
 from systems.combo import ComboSystem
@@ -28,7 +28,21 @@ from systems.projectile_manager import manage_enemy_projectiles
 def get_pattern_name(enemy):
     """Retourne le nom du pattern actuel du boss"""
     # Boss6 et Boss7 utilisent 'pattern', les autres utilisent 'current_pattern'
-    if isinstance(enemy, Boss8):
+    if isinstance(enemy, Boss9):
+        patterns = {
+            0: "Pluie de plumes",
+            1: "Flammes de l'âme",
+            2: "Orbes d'annihilation",
+            3: "Spirale void",
+            4: "Vague phoenix",
+            5: "Barrage d'ailes",
+            6: "Explosion renaissance (Rebirth)",
+            7: "Double spirale (Rebirth)",
+            8: "Apocalypse (Rebirth)"
+        }
+        return patterns.get(enemy.current_pattern, "Inconnu")
+
+    elif isinstance(enemy, Boss8):
         patterns = {
             0: "Pluie de cristaux",
             1: "Rayons prismatiques",
@@ -131,7 +145,8 @@ def show_menu(screen, font):
         "6 - Boss 6 (Vortex du néant)",
         "7 - Boss 7 (Maitre des spheres)",
         "8 - Boss 8 (Leviathan cristallin)",
-        "9 - Ennemi basique",
+        "9 - Boss 9 (Void Phoenix)",
+        "B - Ennemi basique",
         "A - Ennemi tireur",
         "0 - Tous les ennemis",
         "",
@@ -163,6 +178,8 @@ def show_menu(screen, font):
             color = (180, 180, 180)
         elif "Boss 8" in option:
             color = (100, 200, 255)
+        elif "Boss 9" in option:
+            color = (180, 100, 255)
 
         text = font.render(option, True, color)
         screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 250 + i * 50))
@@ -210,6 +227,9 @@ def run_test(entity_type):
     elif entity_type == "Boss 8":
         enemy = Boss8(SCREEN_WIDTH // 2, -120)
         enemies.append(enemy)
+    elif entity_type == "Boss 9":
+        enemy = Boss9(SCREEN_WIDTH // 2, -130)
+        enemies.append(enemy)
     elif entity_type == "Ennemi basique":
         for i in range(5):
             e = Enemy(100 + i * 150, -20 - i * 30)
@@ -256,6 +276,8 @@ def run_test(entity_type):
                         enemies.append(Boss7(SCREEN_WIDTH // 2, -100))
                     elif entity_type == "Boss 8":
                         enemies.append(Boss8(SCREEN_WIDTH // 2, -120))
+                    elif entity_type == "Boss 9":
+                        enemies.append(Boss9(SCREEN_WIDTH // 2, -130))
                     elif entity_type == "Ennemi basique":
                         for i in range(5):
                             enemies.append(Enemy(100 + i * 150, -20 - i * 30))
@@ -377,13 +399,23 @@ def run_test(entity_type):
                             enemy.rect.top + random.randint(0, 200),
                             duration=1500
                         ))
+            elif isinstance(enemy, Boss9):
+                result = enemy.update(player.rect.center, enemy_projectiles)
+                if result is True:
+                    enemies.remove(enemy)
+                    for _ in range(70):
+                        explosions.append(Explosion(
+                            enemy.rect.left + random.randint(0, 220),
+                            enemy.rect.top + random.randint(0, 220),
+                            duration=1800
+                        ))
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(player.rect.center, enemy_projectiles)
             else:
                 enemy.update()
 
         # Supprimer les ennemis hors écran (sauf boss)
-        enemies = [e for e in enemies if e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8))]
+        enemies = [e for e in enemies if e.rect.top < SCREEN_HEIGHT or isinstance(e, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9))]
 
         # Update projectiles ennemis avec le gestionnaire centralisé
         enemy_projectiles = manage_enemy_projectiles(enemy_projectiles, player.rect.center)
@@ -392,14 +424,14 @@ def run_test(entity_type):
         for projectile in projectiles[:]:
             for enemy in enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)) and enemy.is_dying:
                         continue
                     try:
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
                     combo.hit()
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                         enemy.take_damage(1)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -479,7 +511,7 @@ def run_test(entity_type):
 
         # Afficher HP du boss et pattern si présent
         for enemy in enemies:
-            if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+            if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                 boss_hp = font.render(f"Boss HP: {enemy.hp}", True, (255, 100, 100))
                 screen.blit(boss_hp, (10, 90))
 
@@ -508,6 +540,12 @@ def run_test(entity_type):
                 elif isinstance(enemy, Boss8) and enemy.shield_active:
                     shield_text = font.render("BOUCLIER CRISTALLIN", True, (100, 200, 255))
                     screen.blit(shield_text, (10, 170))
+                elif isinstance(enemy, Boss9) and enemy.rebirth_mode:
+                    rebirth_text = font.render("MODE RENAISSANCE!", True, (255, 150, 50))
+                    screen.blit(rebirth_text, (10, 170))
+                elif isinstance(enemy, Boss9) and enemy.rebirth_transition:
+                    trans_text = font.render("TRANSITION...", True, (255, 200, 100))
+                    screen.blit(trans_text, (10, 170))
                 break
 
         # Instructions
@@ -567,6 +605,9 @@ def main():
                     if not run_test("Boss 8"):
                         running = False
                 elif event.key == pygame.K_9:
+                    if not run_test("Boss 9"):
+                        running = False
+                elif event.key == pygame.K_b:
                     if not run_test("Ennemi basique"):
                         running = False
                 elif event.key == pygame.K_a:

@@ -8,7 +8,7 @@ from systems.special_weapon import SpecialWeapon
 from systems.projectile_manager import manage_enemy_projectiles
 from entities.player import Player
 from entities.powerup import PowerUp
-from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8
+from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9
 from entities.enemy import ShootingEnemy, DashEnemy, SplitterEnemy
 from entities.projectiles import RicochetProjectile, PulseWaveProjectile
 from graphics.effects import Explosion
@@ -171,6 +171,15 @@ class GameScreen(Screen):
                         rand_x = enemy.rect.left + random.randint(0, 200)
                         rand_y = enemy.rect.top + random.randint(0, 200)
                         self.explosions.append(Explosion(rand_x, rand_y, duration=1500))
+                    self.level.boss8_defeated = True
+            elif isinstance(enemy, Boss9):
+                result = enemy.update(self.player.rect.center, self.enemy_projectiles)
+                if result is True:
+                    self.level.enemies.remove(enemy)
+                    for _ in range(70):
+                        rand_x = enemy.rect.left + random.randint(0, 220)
+                        rand_y = enemy.rect.top + random.randint(0, 220)
+                        self.explosions.append(Explosion(rand_x, rand_y, duration=1800))
                     self.victory = True
             elif isinstance(enemy, ShootingEnemy):
                 enemy.update(self.player.rect.center, self.enemy_projectiles)
@@ -188,7 +197,7 @@ class GameScreen(Screen):
         for projectile in self.projectiles[:]:
             for enemy in self.level.enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)) and enemy.is_dying:
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)) and enemy.is_dying:
                         continue
 
                     # Gerer le ricochet : le projectile rebondit au lieu d'etre detruit
@@ -208,7 +217,7 @@ class GameScreen(Screen):
                     new_count = self.combo.hit()
                     if self.special_weapon.check_trigger(new_count):
                         self.special_weapon.activate(self.player, self.projectiles)
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                         enemy.take_damage(1)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -262,7 +271,7 @@ class GameScreen(Screen):
     def _check_enemy_collisions(self):
         for enemy in self.level.enemies[:]:
             if enemy.rect.colliderect(self.player.rect):
-                if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)) and enemy.is_dying:
+                if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)) and enemy.is_dying:
                     continue
                 if isinstance(enemy, Boss4) and enemy.charging:
                     if not self.player.invulnerable:
@@ -278,7 +287,7 @@ class GameScreen(Screen):
                     continue
                 if not self.player.invulnerable:
                     self.player.hp -= self.player.contact_damage
-                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                         enemy.take_damage(self.player.contact_damage)
                         if enemy.hp <= 0 and not enemy.is_dying:
                             enemy.is_dying = True
@@ -287,7 +296,7 @@ class GameScreen(Screen):
                     impact_x = (self.player.rect.centerx + enemy.rect.centerx) // 2
                     impact_y = (self.player.rect.centery + enemy.rect.centery) // 2
                     self.explosions.append(Explosion(impact_x, impact_y))
-                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8)):
+                    if enemy.hp <= 0 and not isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
                         if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
                             power_types = ['double', 'triple', 'spread']
                             chosen_power = random.choice(power_types)
