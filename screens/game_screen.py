@@ -10,7 +10,7 @@ from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
 from entities.enemy import ShootingEnemy, DashEnemy, SplitterEnemy
-from entities.projectiles import RicochetProjectile
+from entities.projectiles import RicochetProjectile, PulseWaveProjectile
 from graphics.effects import Explosion
 
 
