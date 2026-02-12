@@ -76,6 +76,9 @@ class Background:
         self.speed = speed
         self.default_speed = speed
         self.planets = []  # Liste des planètes avec leurs propriétés individuelles
+        self.shooting_stars = []  # Étoiles filantes
+        self.twinkling_stars = []  # Étoiles qui scintillent
+        self.time = 0  # Compteur de temps pour les animations
         self.planet_colors = [
             (50, 35, 65),   # Violet sombre
             (35, 50, 65),   # Bleu-gris
@@ -96,8 +99,14 @@ class Background:
             # Générer les planètes initiales
             self._generate_initial_planets()
 
-            # Couche des étoiles (devant les planètes) avec couleurs stellaires réalistes
-            self.stars_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            # Couches d'étoiles avec parallaxe (3 couches de profondeur)
+            self.star_layers = []
+            # (couche, vitesse_relative, nombre_étoiles, tailles_max)
+            layer_configs = [
+                (0.3, 40, 1),   # Couche lointaine - petites, lentes
+                (0.6, 60, 2),   # Couche moyenne
+                (1.0, 50, 3),   # Couche proche - plus grandes, rapides
+            ]
 
             # Couleurs basées sur la température stellaire (classification spectrale)
             star_types = [
@@ -109,31 +118,86 @@ class Background:
                 ((255, 200, 180), 30, [1, 1, 1, 1], [60, 25, 10, 5]),   # Rouge (M) - naines rouges, très communes
             ]
 
-            for _ in range(150):
-                x = random.randint(0, SCREEN_WIDTH)
-                y = random.randint(0, SCREEN_HEIGHT)
+            for layer_idx, (speed_factor, num_stars, max_size) in enumerate(layer_configs):
+                layer_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                layer_y = 0
 
-                # Choisir le type d'étoile selon la distribution réaliste
-                base_color, _, sizes, size_weights = random.choices(
-                    star_types,
-                    weights=[t[1] for t in star_types]
-                )[0]
+                for _ in range(num_stars):
+                    x = random.randint(0, SCREEN_WIDTH)
+                    y = random.randint(0, SCREEN_HEIGHT)
 
-                # Taille corrélée au type (bleues plus grandes, rouges plus petites)
-                size = random.choices(sizes, weights=size_weights)[0]
+                    # Choisir le type d'étoile selon la distribution réaliste
+                    base_color, _, sizes, size_weights = random.choices(
+                        star_types,
+                        weights=[t[1] for t in star_types]
+                    )[0]
 
-                # Variation de luminosité
-                brightness_factor = random.uniform(0.6, 1.0)
-                star_color = (
-                    int(base_color[0] * brightness_factor),
-                    int(base_color[1] * brightness_factor),
-                    int(base_color[2] * brightness_factor)
-                )
+                    # Taille corrélée au type et à la couche
+                    size = min(random.choices(sizes, weights=size_weights)[0], max_size)
 
-                pygame.draw.circle(self.stars_layer, star_color, (x, y), size)
+                    # Variation de luminosité (couches lointaines plus sombres)
+                    brightness_factor = random.uniform(0.5, 0.9) * (0.6 + speed_factor * 0.4)
+                    star_color = (
+                        int(base_color[0] * brightness_factor),
+                        int(base_color[1] * brightness_factor),
+                        int(base_color[2] * brightness_factor)
+                    )
+
+                    pygame.draw.circle(layer_surface, star_color, (x, y), size)
+
+                    # Ajouter certaines étoiles à la liste des scintillantes (surtout les brillantes)
+                    if size >= 2 and random.random() < 0.3:
+                        self.twinkling_stars.append({
+                            'x': x,
+                            'y': y,
+                            'base_color': base_color,
+                            'size': size,
+                            'phase': random.uniform(0, 2 * np.pi),
+                            'frequency': random.uniform(1.5, 4.0),
+                            'layer': layer_idx
+                        })
+
+                self.star_layers.append({
+                    'surface': layer_surface,
+                    'speed_factor': speed_factor,
+                    'y1': 0,
+                    'y2': -SCREEN_HEIGHT
+                })
+
+            # Garder la référence pour compatibilité
+            self.stars_layer = self.star_layers[-1]['surface'] if self.star_layers else None
 
         self.y1 = 0
         self.y2 = -SCREEN_HEIGHT
+
+    def _spawn_shooting_star(self):
+        """Crée une nouvelle étoile filante."""
+        # Position de départ (en haut de l'écran, côté aléatoire)
+        start_x = random.randint(0, SCREEN_WIDTH)
+        start_y = random.randint(-50, SCREEN_HEIGHT // 3)
+
+        # Direction (vers le bas avec angle)
+        angle = random.uniform(0.3, 0.8)  # Angle en radians (vers la droite et le bas)
+        if random.random() < 0.5:
+            angle = np.pi - angle  # Parfois vers la gauche
+
+        speed = random.uniform(8, 15)
+        length = random.randint(30, 80)
+
+        self.shooting_stars.append({
+            'x': start_x,
+            'y': start_y,
+            'vx': np.cos(angle) * speed,
+            'vy': np.sin(angle) * speed,
+            'length': length,
+            'life': 1.0,  # Durée de vie (1.0 = pleine, 0 = morte)
+            'decay': random.uniform(0.015, 0.025),
+            'color': random.choice([
+                (255, 255, 255),
+                (200, 220, 255),
+                (255, 240, 200)
+            ])
+        })
 
     def _generate_space_background(self):
         """Génère un fond spatial avec nébuleuses utilisant le bruit de Perlin (optimisé NumPy)."""
@@ -147,12 +211,16 @@ class Background:
         # Couleurs des nébuleuses avec leurs paramètres
         # (couleur RGB, scale, seuil, intensité)
         nebula_layers = [
-            # Grande nébuleuse violette diffuse (très zoomée)
-            ((60, 20, 80), 0.02, 0.35, 0.5),
+            # Grande nébuleuse violette diffuse (très zoomée) - arrière-plan
+            ((60, 20, 80), 0.015, 0.30, 0.55),
+            # Nébuleuse cyan/turquoise - effet de profondeur
+            ((15, 60, 70), 0.025, 0.38, 0.4),
             # Nébuleuse bleue moyenne
-            ((20, 50, 90), 0.035, 0.4, 0.45),
+            ((20, 50, 90), 0.035, 0.40, 0.45),
             # Nébuleuse magenta/rose plus petite
             ((80, 25, 50), 0.05, 0.45, 0.4),
+            # Touches dorées/orange très subtiles
+            ((70, 40, 15), 0.06, 0.55, 0.25),
         ]
 
         for (nr, ng, nb), scale, threshold, strength in nebula_layers:
@@ -554,13 +622,42 @@ class Background:
         return planet_surface
 
     def update(self):
-        # Mise à jour des étoiles
+        self.time += 1
+
+        # Mise à jour du fond (nébuleuses)
         self.y1 += self.speed
         self.y2 += self.speed
         if self.y1 >= SCREEN_HEIGHT:
             self.y1 = -SCREEN_HEIGHT
         if self.y2 >= SCREEN_HEIGHT:
             self.y2 = -SCREEN_HEIGHT
+
+        # Mise à jour des couches d'étoiles avec parallaxe
+        if hasattr(self, 'star_layers'):
+            for layer in self.star_layers:
+                layer['y1'] += self.speed * layer['speed_factor']
+                layer['y2'] += self.speed * layer['speed_factor']
+                if layer['y1'] >= SCREEN_HEIGHT:
+                    layer['y1'] = -SCREEN_HEIGHT
+                if layer['y2'] >= SCREEN_HEIGHT:
+                    layer['y2'] = -SCREEN_HEIGHT
+
+        # Spawn aléatoire d'étoiles filantes
+        if self.speed > 0 and random.random() < 0.008:
+            self._spawn_shooting_star()
+
+        # Mise à jour des étoiles filantes
+        stars_to_remove = []
+        for i, star in enumerate(self.shooting_stars):
+            star['x'] += star['vx']
+            star['y'] += star['vy']
+            star['life'] -= star['decay']
+
+            if star['life'] <= 0 or star['y'] > SCREEN_HEIGHT + 50:
+                stars_to_remove.append(i)
+
+        for i in reversed(stars_to_remove):
+            self.shooting_stars.pop(i)
 
         # Mise à jour de chaque planète individuellement
         planets_to_remove = []
@@ -581,16 +678,97 @@ class Background:
             self._spawn_new_planet()
 
     def draw(self, surface):
-        # 1. Dessiner le fond sombre
+        # 1. Dessiner le fond sombre (nébuleuses)
         surface.blit(self.image, (0, self.y1))
         surface.blit(self.image, (0, self.y2))
 
-        # 2. Dessiner les planètes (arrière-plan) - triées par taille (plus grosses d'abord = plus loin)
+        # 2. Dessiner les couches d'étoiles avec parallaxe (de la plus lointaine à la plus proche)
+        if hasattr(self, 'star_layers'):
+            for layer_idx, layer in enumerate(self.star_layers):
+                surface.blit(layer['surface'], (0, layer['y1']))
+                surface.blit(layer['surface'], (0, layer['y2']))
+
+            # Dessiner le scintillement des étoiles par-dessus
+            self._draw_twinkling_stars(surface)
+
+        # 3. Dessiner les planètes - triées par taille (plus grosses d'abord = plus loin)
         sorted_planets = sorted(self.planets, key=lambda p: p['radius'], reverse=True)
         for planet in sorted_planets:
             surface.blit(planet['surface'], (planet['x'], planet['y']))
 
-        # 3. Dessiner les étoiles (devant les planètes)
-        if self.stars_layer:
-            surface.blit(self.stars_layer, (0, self.y1))
-            surface.blit(self.stars_layer, (0, self.y2))
+        # 4. Dessiner les étoiles filantes
+        self._draw_shooting_stars(surface)
+
+    def _draw_twinkling_stars(self, surface):
+        """Dessine l'effet de scintillement sur les étoiles sélectionnées."""
+        for star in self.twinkling_stars:
+            # Calculer l'intensité du scintillement
+            twinkle = np.sin(self.time * 0.1 * star['frequency'] + star['phase'])
+            intensity = 0.6 + twinkle * 0.4  # Varie entre 0.2 et 1.0
+
+            # Obtenir la position Y de la couche correspondante
+            if hasattr(self, 'star_layers') and star['layer'] < len(self.star_layers):
+                layer = self.star_layers[star['layer']]
+                y_offset1 = layer['y1']
+                y_offset2 = layer['y2']
+
+                # Calculer la couleur avec scintillement
+                color = (
+                    int(star['base_color'][0] * intensity),
+                    int(star['base_color'][1] * intensity),
+                    int(star['base_color'][2] * intensity),
+                    int(200 * intensity)
+                )
+
+                # Dessiner un halo lumineux quand l'étoile est brillante
+                if intensity > 0.8:
+                    glow_size = star['size'] + 2
+                    glow_alpha = int(80 * (intensity - 0.8) / 0.2)
+                    glow_color = (star['base_color'][0], star['base_color'][1], star['base_color'][2], glow_alpha)
+
+                    # Position 1
+                    y1 = star['y'] + y_offset1
+                    if 0 <= y1 <= SCREEN_HEIGHT:
+                        pygame.draw.circle(surface, glow_color, (star['x'], int(y1)), glow_size)
+
+                    # Position 2
+                    y2 = star['y'] + y_offset2
+                    if 0 <= y2 <= SCREEN_HEIGHT:
+                        pygame.draw.circle(surface, glow_color, (star['x'], int(y2)), glow_size)
+
+    def _draw_shooting_stars(self, surface):
+        """Dessine les étoiles filantes avec traînée."""
+        for star in self.shooting_stars:
+            if star['life'] <= 0:
+                continue
+
+            # Calculer les points de la traînée
+            length = star['length'] * star['life']
+            end_x = star['x'] - star['vx'] / np.sqrt(star['vx']**2 + star['vy']**2) * length
+            end_y = star['y'] - star['vy'] / np.sqrt(star['vx']**2 + star['vy']**2) * length
+
+            # Dessiner la traînée avec dégradé
+            num_segments = 8
+            for i in range(num_segments):
+                t1 = i / num_segments
+                t2 = (i + 1) / num_segments
+
+                x1 = star['x'] * (1 - t1) + end_x * t1
+                y1 = star['y'] * (1 - t1) + end_y * t1
+                x2 = star['x'] * (1 - t2) + end_x * t2
+                y2 = star['y'] * (1 - t2) + end_y * t2
+
+                # Alpha décroissant vers la queue
+                alpha = int(255 * star['life'] * (1 - t1))
+                color = (star['color'][0], star['color'][1], star['color'][2], alpha)
+
+                # Épaisseur décroissante
+                thickness = max(1, int(3 * (1 - t1) * star['life']))
+
+                # Créer une surface temporaire pour l'alpha
+                if alpha > 0:
+                    pygame.draw.line(surface, color[:3], (int(x1), int(y1)), (int(x2), int(y2)), thickness)
+
+            # Point brillant à la tête
+            head_alpha = int(255 * star['life'])
+            pygame.draw.circle(surface, star['color'], (int(star['x']), int(star['y'])), 2)
