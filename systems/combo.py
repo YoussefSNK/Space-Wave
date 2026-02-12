@@ -20,6 +20,7 @@ class ComboSystem:
         else:
             self.count += 1
         self.last_hit_time = now
+        return self.count
 
     def miss(self):
         """Appelé quand un tir quitte l'écran sans toucher - reset le combo"""

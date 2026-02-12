@@ -4,6 +4,7 @@ from screens.base import Screen
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE
 from systems.level import Level
 from systems.combo import ComboSystem
+from systems.special_weapon import SpecialWeapon
 from systems.projectile_manager import manage_enemy_projectiles
 from entities.player import Player
 from entities.powerup import PowerUp
@@ -34,6 +35,7 @@ class GameScreen(Screen):
         self.explosions = []
         self.powerups = []
         self.combo = ComboSystem()
+        self.special_weapon = SpecialWeapon()
         self.font = pygame.font.SysFont(None, 36)
 
     def handle_event(self, event):
@@ -79,8 +81,9 @@ class GameScreen(Screen):
 
         # Détecter les tirs qui quittent l'écran sans toucher
         projectiles_avant = len(self.projectiles)
+        removed = [p for p in self.projectiles if p.rect.bottom <= 0]
         self.projectiles = [p for p in self.projectiles if p.rect.bottom > 0]
-        tirs_rates = projectiles_avant - len(self.projectiles)
+        tirs_rates = sum(1 for p in removed if not getattr(p, 'is_special_weapon', False))
         if tirs_rates > 0:
             self.combo.miss()
 
@@ -93,6 +96,7 @@ class GameScreen(Screen):
         self._update_explosions()
         self._update_powerups()
         self.combo.update()
+        self.special_weapon.update()
 
     def _update_enemies(self):
         for enemy in self.level.enemies[:]:
@@ -183,7 +187,9 @@ class GameScreen(Screen):
                         except ValueError:
                             pass
 
-                    self.combo.hit()
+                    new_count = self.combo.hit()
+                    if self.special_weapon.check_trigger(new_count):
+                        self.special_weapon.activate(self.player, self.projectiles)
                     if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
                         enemy.take_damage(1)
                         if enemy.hp <= 0 and not enemy.is_dying:
@@ -336,6 +342,7 @@ class GameScreen(Screen):
         hp_text = self.font.render(f"HP: {self.player.hp}", True, WHITE)
         self.screen.blit(hp_text, (10, 50))
         self.combo.draw(self.screen, self.font)
+        self.special_weapon.draw(self.screen, self.font)
 
         # Fondu au noir progressif pendant le crash (4 secondes) et reste noir après
         if self.fade_timer > 0:

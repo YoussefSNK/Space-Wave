@@ -8,3 +8,4 @@ from .movement_patterns import (
     HorizontalWavePattern
 )
 from .level import Level
+from .special_weapon import SpecialWeapon

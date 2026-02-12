@@ -46,6 +46,7 @@ class Projectile(TrailedProjectile):
         self.image.fill(YELLOW)
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = speed
+        self.is_special_weapon = False
 
     def update(self):
         self.update_trail()

@@ -4,6 +4,7 @@ import random
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, ScalableDisplay
 from systems.level import Level
 from systems.combo import ComboSystem
+from systems.special_weapon import SpecialWeapon
 from entities.player import Player
 from entities.powerup import PowerUp
 from entities.bosses import Boss, Boss2, Boss3, Boss4, Boss5, Boss6
@@ -27,6 +28,7 @@ def run_game():
     explosions = []
     powerups = []
     combo = ComboSystem()
+    special_weapon = SpecialWeapon()
 
     while running:
         for event in pygame.event.get():
@@ -44,8 +46,9 @@ def run_game():
 
         # Detecter les tirs qui quittent l'ecran sans toucher - reset le combo
         projectiles_avant = len(projectiles)
+        removed = [p for p in projectiles if p.rect.bottom <= 0]
         projectiles = [p for p in projectiles if p.rect.bottom > 0]
-        tirs_rates = projectiles_avant - len(projectiles)
+        tirs_rates = sum(1 for p in removed if not getattr(p, 'is_special_weapon', False))
         if tirs_rates > 0:
             combo.miss()
 
@@ -147,7 +150,9 @@ def run_game():
                         projectiles.remove(projectile)
                     except ValueError:
                         pass
-                    combo.hit()
+                    new_count = combo.hit()
+                    if special_weapon.check_trigger(new_count):
+                        special_weapon.activate(player, projectiles)
                     if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6)):
                         enemy.take_damage(1)
                         if isinstance(enemy, Boss):
@@ -292,6 +297,7 @@ def run_game():
                     pass
 
         combo.update()
+        special_weapon.update()
 
         screen.fill(BLACK)
         level.draw(screen)
@@ -312,6 +318,7 @@ def run_game():
         screen.blit(hp_text, (10, 50))
 
         combo.draw(screen, font)
+        special_weapon.draw(screen, font)
 
         display.render()
         clock.tick(FPS)
