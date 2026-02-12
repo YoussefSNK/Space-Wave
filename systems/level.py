@@ -1,7 +1,7 @@
 import random
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
-from graphics.background import Background
+from graphics.shared_background import get_shared_background, set_background_speed
 from entities.enemy import (
     Enemy, BasicEnemy, FormationVEnemy, FormationLineEnemy,
     SineWaveEnemy, ZigZagEnemy, SwoopEnemy, HorizontalEnemy,
@@ -15,7 +15,8 @@ from systems.movement_patterns import (
 
 class Level:
     def __init__(self):
-        self.background = Background(speed=2)
+        self.background = get_shared_background()
+        set_background_speed(2)  # Vitesse standard pour le jeu
         self.timer = 0
         self.enemies = []
         self.spawn_events = [

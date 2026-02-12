@@ -5,6 +5,7 @@ from screens.level_select import LevelSelectScreen
 from screens.game_screen import GameScreen
 from screens.lobby import LobbyScreen
 from screens.multiplayer_game import MultiplayerGameScreen
+from graphics.shared_background import get_shared_background
 
 
 def main():
@@ -16,6 +17,9 @@ def main():
 
     # La surface interne où le jeu est dessiné (toujours 800x1000)
     screen = display.get_internal_surface()
+
+    # Initialiser le background partagé dès le démarrage
+    get_shared_background()
 
     current_screen = "menu"
     selected_level = 1

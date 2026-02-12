@@ -1,7 +1,7 @@
 import pygame
 from screens.base import Screen, Button
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, BLACK, WHITE
-from graphics.background import Background
+from graphics.shared_background import get_shared_background, set_background_speed
 
 
 class MenuScreen(Screen):
@@ -9,7 +9,8 @@ class MenuScreen(Screen):
 
     def __init__(self, screen, scalable_display=None):
         super().__init__(screen, scalable_display)
-        self.background = Background()
+        self.background = get_shared_background()
+        set_background_speed(2)  # Vitesse standard pour le menu
 
         # Titre du jeu
         self.title_font = pygame.font.SysFont(None, 72)

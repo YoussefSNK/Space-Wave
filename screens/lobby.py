@@ -4,7 +4,7 @@ import pygame
 import threading
 from screens.base import Screen, Button
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, BLACK, WHITE, CYAN
-from graphics.background import Background
+from graphics.shared_background import get_shared_background, set_background_speed
 from network.client import GameClient
 
 
@@ -88,7 +88,8 @@ class LobbyScreen(Screen):
 
     def __init__(self, screen, scalable_display=None):
         super().__init__(screen, scalable_display)
-        self.background = Background()
+        self.background = get_shared_background()
+        set_background_speed(2)  # Vitesse standard pour le lobby
         self.client: GameClient = None
 
         # États: "connecting", "browse", "create", "in_lobby"

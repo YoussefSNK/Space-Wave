@@ -5,7 +5,7 @@ import math
 import random
 from screens.base import Screen
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, BLACK, WHITE, CYAN, RED, YELLOW
-from graphics.background import Background
+from graphics.shared_background import get_shared_background, set_background_speed
 from graphics.effects import Explosion
 from entities.player import Player
 from entities.enemy import (
@@ -143,7 +143,8 @@ class MultiplayerGameScreen(Screen):
     def __init__(self, screen, scalable_display, client: GameClient):
         super().__init__(screen, scalable_display)
         self.client = client
-        self.background = Background()
+        self.background = get_shared_background()
+        set_background_speed(2)  # Vitesse standard pour le jeu
 
         self.game_over = False
         self.victory = False
