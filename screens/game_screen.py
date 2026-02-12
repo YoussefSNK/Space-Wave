@@ -317,6 +317,7 @@ class GameScreen(Screen):
                         self.player.invuln_start = pygame.time.get_ticks()
 
     def _check_laser_collision(self):
+        # Collision laser du Boss3 avec le joueur
         for enemy in self.level.enemies:
             if isinstance(enemy, Boss3) and enemy.laser_active and not self.player.invulnerable:
                 laser_rect = pygame.Rect(enemy.laser_target_x - 25, 0, 50, SCREEN_HEIGHT)
@@ -330,6 +331,30 @@ class GameScreen(Screen):
                     else:
                         self.player.invulnerable = True
                         self.player.invuln_start = pygame.time.get_ticks()
+
+        # Collision laser du joueur (arme speciale) avec les ennemis
+        if self.special_weapon.active_laser:
+            for enemy in self.level.enemies[:]:
+                if self.special_weapon.check_laser_collision(enemy):
+                    if isinstance(enemy, (Boss, Boss2, Boss3, Boss4, Boss5, Boss6, Boss7, Boss8, Boss9)):
+                        if enemy.is_dying:
+                            continue
+                        enemy.take_damage(1)
+                        if enemy.hp <= 0 and not enemy.is_dying:
+                            enemy.is_dying = True
+                    else:
+                        enemy.hp -= 1
+                        if enemy.hp <= 0:
+                            if hasattr(enemy, 'drops_powerup') and enemy.drops_powerup:
+                                power_types = ['double', 'triple', 'spread', 'ricochet']
+                                chosen_power = random.choice(power_types)
+                                powerup = PowerUp(enemy.rect.centerx, enemy.rect.centery, chosen_power)
+                                self.powerups.append(powerup)
+                            if isinstance(enemy, SplitterEnemy):
+                                mini_enemies = enemy.split()
+                                self.level.enemies.extend(mini_enemies)
+                            self.level.enemies.remove(enemy)
+                            self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
 
     def _update_explosions(self):
         for exp in self.explosions:
