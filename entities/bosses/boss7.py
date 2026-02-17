@@ -5,7 +5,7 @@ import math
 from config import SCREEN_WIDTH
 from graphics.effects import Explosion
 from entities.enemy import Enemy
-from entities.projectiles import Boss7Projectile, EdgeRollerProjectile, BallBreakerProjectile, CurveStalkerProjectile
+from entities.projectiles import Boss7Projectile, EdgeRollerProjectile, BallBreakerProjectile, CurveStalkerProjectile, PathChaserProjectile
 
 
 class Boss7(Enemy):
@@ -24,7 +24,7 @@ class Boss7(Enemy):
         self.pattern_timer = 0
         self.pattern_duration = 360
         self.next_projectile_type = "ball_breaker"  # Commence avec Ball Breaker
-        self.projectile_cycle = ["ball_breaker", "edge_roller", "curve_stalker"]
+        self.projectile_cycle = ["ball_breaker", "edge_roller", "curve_stalker", "path_chaser"]
         self.projectile_index = 0
         self.is_dying = False
         self.death_timer = 0
@@ -133,7 +133,7 @@ class Boss7(Enemy):
                     player_pos[0], player_pos[1],
                     speed=9
                 )
-            else:  # curve_stalker
+            elif current_type == "curve_stalker":
                 # Determine le cote du spawn (gauche ou droite du boss)
                 side = "left" if spawn_x < cx else "right"
                 proj = CurveStalkerProjectile(
@@ -141,6 +141,11 @@ class Boss7(Enemy):
                     self.rect.left, self.rect.right,
                     side,
                     speed=6.5
+                )
+            else:  # path_chaser
+                proj = PathChaserProjectile(
+                    spawn_x, spawn_y,
+                    speed=20
                 )
 
             # Passer au type suivant dans le cycle

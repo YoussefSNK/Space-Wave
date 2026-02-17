@@ -1643,6 +1643,230 @@ class CurveStalkerProjectile(EnemyProjectile):
         pygame.draw.circle(surface, WHITE, self.rect.center, 6)
 
 
+class PathChaserProjectile(EnemyProjectile):
+    """
+    Projectile special du Boss 7 - Path Chaser
+    Phase 1: Des points blancs apparaissent successivement sur l'ecran (10 points)
+             places sur des diagonales alternees.
+    Phase 2: La balle est lancee depuis le boss et rejoint chaque point en ligne droite.
+             Apres le dernier point, elle quitte l'ecran dans la meme direction.
+    """
+    PHASE_ANNOUNCE = 1  # Affichage des points
+    PHASE_TRAVEL = 2    # La balle se deplace entre les points
+    PHASE_EXIT = 3      # La balle quitte l'ecran
+
+    NUM_POINTS = 10
+    ANNOUNCE_INTERVAL = 10  # Frames entre chaque apparition de point
+
+    def __init__(self, x, y, speed=9.0):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=15,
+            trail_color_func=lambda progress, alpha: (255, 255, 200, alpha),
+            trail_size_func=lambda progress: max(2, int(8 * progress))
+        )
+
+        self.image = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (255, 255, 200), (24, 24), 24)
+        pygame.draw.circle(self.image, (255, 255, 230), (24, 24), 16)
+        pygame.draw.circle(self.image, WHITE, (24, 24), 6)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = 0
+        self.dy = 0
+        self.speed = speed
+        self.float_x = float(x)
+        self.float_y = float(y)
+
+        self.phase = self.PHASE_ANNOUNCE
+        self.timer = 0
+        self.boss_x = x
+        self.boss_y = y
+
+        # Generer les points de passage
+        self.waypoints = self._generate_waypoints()
+        self.visible_points = 0  # Nombre de points actuellement visibles
+        self.current_target_index = 0  # Index du point cible actuel
+        self.point_appear_frames = []  # Frame d'apparition de chaque point
+
+        # Taille des points d'annonce
+        self.dot_radius = 10
+        self.dot_pulse_timer = 0
+        self.dot_lifetime = 60  # 1 seconde a 60 FPS
+        self.flash_duration = 12  # Duree du flash d'etoile en frames
+
+    def _generate_waypoints(self):
+        """Genere les points de passage aleatoirement sur l'ecran."""
+        points = []
+        margin = 40  # Marge par rapport aux bords de l'ecran
+
+        for i in range(self.NUM_POINTS):
+            new_x = random.uniform(margin, SCREEN_WIDTH - margin)
+            new_y = random.uniform(margin, SCREEN_HEIGHT - margin)
+            points.append((new_x, new_y))
+
+        return points
+
+    def update(self):
+        self.update_trail()
+        self.timer += 1
+        self.dot_pulse_timer += 1
+
+        if self.phase == self.PHASE_ANNOUNCE:
+            self._update_announce()
+        elif self.phase == self.PHASE_TRAVEL:
+            self._update_travel()
+        elif self.phase == self.PHASE_EXIT:
+            self._update_exit()
+
+    def _update_announce(self):
+        """Phase 1: Afficher les points un par un."""
+        # Reveler un nouveau point selon l'intervalle
+        expected_visible = min(self.NUM_POINTS, self.timer // self.ANNOUNCE_INTERVAL + 1)
+        while len(self.point_appear_frames) < expected_visible:
+            self.point_appear_frames.append(self.timer)
+        self.visible_points = expected_visible
+
+        # Tous les points sont visibles -> passer en phase 2
+        # Attendre que le dernier point ait fini sa duree de vie
+        last_point_age = self.timer - self.point_appear_frames[-1] if self.point_appear_frames else 0
+        if self.visible_points >= self.NUM_POINTS and last_point_age >= self.dot_lifetime:
+            self.phase = self.PHASE_TRAVEL
+            self.current_target_index = 0
+            self._set_direction_to_target()
+
+    def _set_direction_to_target(self):
+        """Calcule la direction vers le point cible actuel."""
+        target_x, target_y = self.waypoints[self.current_target_index]
+        dx = target_x - self.float_x
+        dy = target_y - self.float_y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > 0:
+            self.dx = dx / dist
+            self.dy = dy / dist
+        else:
+            self.dx = 0
+            self.dy = 1
+
+    def _advance_to_next_target(self):
+        """Passe au point suivant ou en phase de sortie."""
+        self.current_target_index += 1
+
+        if self.current_target_index >= self.NUM_POINTS:
+            # Dernier point atteint -> phase de sortie
+            last_x, last_y = self.waypoints[-1]
+            prev_x, prev_y = self.waypoints[-2]
+            exit_dx = last_x - prev_x
+            exit_dy = last_y - prev_y
+            dist = math.sqrt(exit_dx * exit_dx + exit_dy * exit_dy)
+            if dist > 0:
+                self.dx = exit_dx / dist
+                self.dy = exit_dy / dist
+            self.phase = self.PHASE_EXIT
+        else:
+            self._set_direction_to_target()
+
+    def _update_travel(self):
+        """Phase 2: Se deplacer vers chaque point successivement."""
+        target_x, target_y = self.waypoints[self.current_target_index]
+
+        # Distance restante vers la cible
+        remaining_x = target_x - self.float_x
+        remaining_y = target_y - self.float_y
+        dist = math.sqrt(remaining_x * remaining_x + remaining_y * remaining_y)
+
+        if dist <= self.speed:
+            # On atteint le point ce frame -> se placer dessus et passer au suivant
+            self.float_x = target_x
+            self.float_y = target_y
+            self.rect.center = (int(self.float_x), int(self.float_y))
+            self._advance_to_next_target()
+        else:
+            # Avancer vers la cible
+            self.float_x += self.dx * self.speed
+            self.float_y += self.dy * self.speed
+            self.rect.center = (int(self.float_x), int(self.float_y))
+
+    def _update_exit(self):
+        """Phase 3: Quitter l'ecran en ligne droite."""
+        self.float_x += self.dx * self.speed
+        self.float_y += self.dy * self.speed
+        self.rect.center = (int(self.float_x), int(self.float_y))
+
+    def _draw_star_flash(self, surface, px, py, progress):
+        """Dessine un flash d'etoile. progress va de 0 (debut) a 1 (fin du flash)."""
+        # L'etoile commence grande et retrecit
+        max_ray_length = 30
+        ray_length = max_ray_length * (1 - progress)
+        alpha = int(255 * (1 - progress * 0.5))
+
+        flash_surf = pygame.Surface((int(ray_length * 2 + 30), int(ray_length * 2 + 30)), pygame.SRCALPHA)
+        cx, cy = flash_surf.get_width() // 2, flash_surf.get_height() // 2
+
+        # 4 branches d'etoile (croix +) et 4 branches diagonales (croix x)
+        for angle_deg in range(0, 360, 45):
+            angle = math.radians(angle_deg)
+            # Branches principales (0, 90, 180, 270) plus longues
+            length = ray_length if angle_deg % 90 == 0 else ray_length * 0.6
+            end_x = cx + math.cos(angle) * length
+            end_y = cy + math.sin(angle) * length
+            width = max(1, int(3 * (1 - progress)))
+            pygame.draw.line(flash_surf, (255, 255, 255, alpha),
+                           (cx, cy), (int(end_x), int(end_y)), width)
+
+        # Halo central
+        halo_radius = int(12 * (1 - progress * 0.3))
+        pygame.draw.circle(flash_surf, (255, 255, 220, int(alpha * 0.5)),
+                          (cx, cy), halo_radius)
+
+        surface.blit(flash_surf, (px - flash_surf.get_width() // 2,
+                                   py - flash_surf.get_height() // 2))
+
+    def draw(self, surface):
+        # Dessiner les points de passage
+        for i in range(min(self.visible_points, len(self.waypoints))):
+            wx, wy = self.waypoints[i]
+            px, py = int(wx), int(wy)
+
+            if self.phase == self.PHASE_ANNOUNCE:
+                # Calculer l'age du point
+                age = self.timer - self.point_appear_frames[i]
+
+                # Point disparu apres sa duree de vie
+                if age >= self.dot_lifetime:
+                    continue
+
+                # Flash d'etoile a l'apparition
+                if age < self.flash_duration:
+                    flash_progress = age / self.flash_duration
+                    self._draw_star_flash(surface, px, py, flash_progress)
+
+                # Fade out progressif dans la derniere moitie de la duree de vie
+                fade_start = self.dot_lifetime // 2
+                if age >= fade_start:
+                    opacity = 1.0 - (age - fade_start) / (self.dot_lifetime - fade_start)
+                else:
+                    opacity = 1.0
+
+                # Dessiner le point avec opacite
+                dot_surf = pygame.Surface((self.dot_radius * 2 + 4, self.dot_radius * 2 + 4), pygame.SRCALPHA)
+                center = self.dot_radius + 2
+                alpha = int(255 * opacity)
+                pygame.draw.circle(dot_surf, (255, 255, 255, alpha), (center, center), self.dot_radius)
+                pygame.draw.circle(dot_surf, (200, 200, 220, int(alpha * 0.8)), (center, center), max(1, self.dot_radius - 3))
+                surface.blit(dot_surf, (px - center, py - center))
+
+            # Phase TRAVEL: les points sont invisibles
+
+        # Dessiner la trainee et la balle seulement en phase 2 et 3
+        if self.phase in (self.PHASE_TRAVEL, self.PHASE_EXIT):
+            self.draw_trail(surface)
+
+            # Couleur jaune/blanc chaud
+            pygame.draw.circle(surface, (255, 255, 150), self.rect.center, 24)
+            pygame.draw.circle(surface, (255, 255, 200), self.rect.center, 16)
+            pygame.draw.circle(surface, WHITE, self.rect.center, 6)
+
+
 class Boss8Projectile(EnemyProjectile):
     """Projectile du Boss 8 - cristal bleu/cyan prismatique"""
     def __init__(self, x, y, dx, dy, speed=5):
