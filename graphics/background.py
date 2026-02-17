@@ -1147,3 +1147,376 @@ class SpiralNebulaBackground:
 
         # 5. Étoiles filantes
         self._draw_shooting_stars(surface)
+
+
+class AuroraBackground:
+    """Background spatial avec des aurores cosmiques - de magnifiques rideaux de lumière
+    colorés ondulant à travers l'espace profond, avec des amas galactiques lointains
+    et des particules cosmiques lumineuses."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.planets = []
+        self.shooting_stars = []
+        self.twinkling_stars = []
+        self.time = 0
+        self.planet_colors = [
+            (50, 35, 65),
+            (35, 50, 65),
+            (65, 45, 30),
+            (45, 60, 45),
+            (60, 35, 35),
+            (50, 50, 35),
+        ]
+
+        # Fond statique : espace profond avec amas galactiques lointains
+        self.static_bg = self._generate_deep_space()
+
+        # Couche d'aurore cosmique (défile lentement)
+        self.aurora_layer = self._generate_aurora_layer()
+        self.aurora_y1 = 0
+        self.aurora_y2 = -SCREEN_HEIGHT
+
+        # Particules cosmiques lumineuses flottantes
+        self.cosmic_particles = []
+        for _ in range(25):
+            self.cosmic_particles.append({
+                'x': random.randint(0, SCREEN_WIDTH),
+                'y': random.randint(0, SCREEN_HEIGHT),
+                'size': random.uniform(1.0, 2.5),
+                'color': random.choice([
+                    (100, 255, 150),
+                    (80, 220, 255),
+                    (180, 120, 255),
+                    (255, 255, 200),
+                ]),
+                'drift_x': random.uniform(-0.2, 0.2),
+                'phase': random.uniform(0, 2 * np.pi),
+                'pulse_speed': random.uniform(0.03, 0.07),
+            })
+
+        # Planètes
+        self._generate_initial_planets()
+
+        # Couches d'étoiles avec parallaxe
+        self.star_layers = []
+        layer_configs = [
+            (0.3, 40, 1),
+            (0.6, 60, 2),
+            (1.0, 50, 3),
+        ]
+
+        star_types = [
+            ((200, 220, 255), 5, [2, 2, 3, 3], [20, 30, 30, 20]),
+            ((255, 255, 255), 15, [1, 2, 2, 3], [30, 35, 25, 10]),
+            ((255, 255, 200), 20, [1, 1, 2, 2], [40, 30, 20, 10]),
+            ((255, 220, 180), 30, [1, 1, 1, 2], [50, 30, 15, 5]),
+            ((255, 200, 180), 30, [1, 1, 1, 1], [60, 25, 10, 5]),
+        ]
+
+        for layer_idx, (speed_factor, num_stars, max_size) in enumerate(layer_configs):
+            layer_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+            for _ in range(num_stars):
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(0, SCREEN_HEIGHT)
+
+                base_color, _, sizes, size_weights = random.choices(
+                    star_types,
+                    weights=[t[1] for t in star_types]
+                )[0]
+
+                size = min(random.choices(sizes, weights=size_weights)[0], max_size)
+
+                brightness_factor = random.uniform(0.5, 0.9) * (0.6 + speed_factor * 0.4)
+                star_color = (
+                    int(base_color[0] * brightness_factor),
+                    int(base_color[1] * brightness_factor),
+                    int(base_color[2] * brightness_factor)
+                )
+
+                pygame.draw.circle(layer_surface, star_color, (x, y), size)
+
+                if size >= 2 and random.random() < 0.3:
+                    self.twinkling_stars.append({
+                        'x': x,
+                        'y': y,
+                        'base_color': base_color,
+                        'size': size,
+                        'phase': random.uniform(0, 2 * np.pi),
+                        'frequency': random.uniform(1.5, 4.0),
+                        'layer': layer_idx
+                    })
+
+            self.star_layers.append({
+                'surface': layer_surface,
+                'speed_factor': speed_factor,
+                'y1': 0,
+                'y2': -SCREEN_HEIGHT
+            })
+
+        self.stars_layer = self.star_layers[-1]['surface'] if self.star_layers else None
+        self.y1 = 0
+        self.y2 = -SCREEN_HEIGHT
+
+    def _generate_deep_space(self):
+        """Génère un fond d'espace très profond avec de subtils amas galactiques lointains."""
+        shape = (SCREEN_HEIGHT, SCREEN_WIDTH)
+
+        # Base très sombre avec teinte bleu-violet profond
+        base_r = np.full(shape, 3, dtype=np.float64)
+        base_g = np.full(shape, 3, dtype=np.float64)
+        base_b = np.full(shape, 8, dtype=np.float64)
+
+        # Bruit subtil pour variation de fond
+        noise = generate_perlin_noise_2d(shape, scale=0.012, octaves=3, persistence=0.5,
+                                          seed=random.randint(0, 10000), tileable_y=False)
+
+        base_r += np.clip(noise * 5, 0, 8)
+        base_g += np.clip(noise * 3, 0, 6)
+        base_b += np.clip(noise * 8, 0, 12)
+
+        # Amas galactiques lointains (petites taches elliptiques diffuses)
+        yy, xx = np.mgrid[0:SCREEN_HEIGHT, 0:SCREEN_WIDTH]
+        num_clusters = random.randint(4, 7)
+        for _ in range(num_clusters):
+            cx = random.randint(0, SCREEN_WIDTH)
+            cy = random.randint(0, SCREEN_HEIGHT)
+            radius_x = random.randint(15, 50)
+            radius_y = random.randint(10, 35)
+            angle = random.uniform(0, np.pi)
+
+            cluster_colors = [
+                (20, 15, 30),
+                (15, 20, 30),
+                (25, 15, 20),
+                (20, 20, 15),
+            ]
+            cc = random.choice(cluster_colors)
+
+            dx = xx - cx
+            dy = yy - cy
+            rx = dx * np.cos(angle) + dy * np.sin(angle)
+            ry = -dx * np.sin(angle) + dy * np.cos(angle)
+            dist = np.sqrt((rx / max(radius_x, 1)) ** 2 + (ry / max(radius_y, 1)) ** 2)
+            intensity = np.exp(-(dist ** 2) / 0.6) * 0.5
+
+            base_r += cc[0] * intensity
+            base_g += cc[1] * intensity
+            base_b += cc[2] * intensity
+
+        # Flou pour adoucir les amas et le fond
+        base_r = self._blur_2d(base_r, radius=12, passes=2)
+        base_g = self._blur_2d(base_g, radius=12, passes=2)
+        base_b = self._blur_2d(base_b, radius=12, passes=2)
+
+        final_r = np.clip(base_r, 0, 255).astype(np.uint8)
+        final_g = np.clip(base_g, 0, 255).astype(np.uint8)
+        final_b = np.clip(base_b, 0, 255).astype(np.uint8)
+
+        rgb_array = np.stack([final_r, final_g, final_b], axis=-1)
+        surface = pygame.surfarray.make_surface(rgb_array.swapaxes(0, 1))
+        return surface
+
+    @staticmethod
+    def _blur_2d(arr, radius=8, passes=2):
+        """Applique un flou rapide (box blur via sommes cumulées), multi-passes."""
+        result = arr.astype(np.float64)
+        k = 2 * radius + 1
+        h, w = arr.shape
+        for _ in range(passes):
+            # Flou vertical
+            padded = np.pad(result, ((radius, radius), (0, 0)), mode='edge')
+            cs = np.vstack([np.zeros((1, w)), np.cumsum(padded, axis=0)])
+            result = (cs[k:k + h, :] - cs[:h, :]) / k
+            # Flou horizontal
+            padded = np.pad(result, ((0, 0), (radius, radius)), mode='edge')
+            cs = np.hstack([np.zeros((h, 1)), np.cumsum(padded, axis=1)])
+            result = (cs[:, k:k + w] - cs[:, :w]) / k
+        return result
+
+    def _generate_aurora_layer(self):
+        """Génère les rideaux d'aurore cosmique, tileable verticalement pour le scroll."""
+        surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        shape = (SCREEN_HEIGHT, SCREEN_WIDTH)
+
+        seed = random.randint(0, 10000)
+        noise1 = generate_perlin_noise_2d(shape, scale=0.015, octaves=5, persistence=0.6,
+                                           seed=seed, tileable_y=True)
+        noise2 = generate_perlin_noise_2d(shape, scale=0.04, octaves=4, persistence=0.5,
+                                           seed=seed + 1, tileable_y=True)
+        noise3 = generate_perlin_noise_2d(shape, scale=0.008, octaves=3, persistence=0.7,
+                                           seed=seed + 2, tileable_y=True)
+
+        _, xx = np.mgrid[0:SCREEN_HEIGHT, 0:SCREEN_WIDTH]
+        x_norm = xx / SCREEN_WIDTH
+
+        # Rideau 1 : Vert émeraude brillant (le plus visible)
+        curtain1 = np.sin(x_norm * np.pi * 7 + noise1 * 4) * 0.5 + 0.5
+        curtain1 = np.clip((curtain1 - 0.40) / 0.60, 0, 1) ** 1.0
+        curtain1 *= np.clip(0.6 + noise2 * 0.25 + noise3 * 0.15, 0, 1)
+
+        # Rideau 2 : Cyan / turquoise
+        curtain2 = np.sin(x_norm * np.pi * 11 + noise2 * 3.5 + 1.8) * 0.5 + 0.5
+        curtain2 = np.clip((curtain2 - 0.45) / 0.55, 0, 1) ** 1.2
+        curtain2 *= np.clip(0.5 + noise1 * 0.3 + noise3 * 0.2, 0, 1)
+
+        # Rideau 3 : Violet / magenta (plus subtil)
+        curtain3 = np.sin(x_norm * np.pi * 5 + noise3 * 5 + 3.2) * 0.5 + 0.5
+        curtain3 = np.clip((curtain3 - 0.35) / 0.65, 0, 1) ** 0.8
+        curtain3 *= np.clip(0.4 + noise1 * 0.2 + noise2 * 0.2, 0, 1)
+
+        # Rideau 4 : Rose pâle (touches délicates)
+        curtain4 = np.sin(x_norm * np.pi * 9 + noise1 * 3 + noise2 * 2 + 5.0) * 0.5 + 0.5
+        curtain4 = np.clip((curtain4 - 0.50) / 0.50, 0, 1) ** 1.2
+        curtain4 *= np.clip(0.3 + noise3 * 0.25, 0, 1)
+
+        # Couleurs des rideaux
+        r = curtain1 * 25 + curtain2 * 15 + curtain3 * 130 + curtain4 * 200
+        g = curtain1 * 230 + curtain2 * 190 + curtain3 * 30 + curtain4 * 80
+        b = curtain1 * 100 + curtain2 * 210 + curtain3 * 160 + curtain4 * 120
+
+        # Coeur brillant des rideaux les plus intenses (blanc chaud)
+        bright_core = np.clip(curtain1 - 0.65, 0, 1) / 0.35
+        r += bright_core * 80
+        g += bright_core * 50
+        b += bright_core * 30
+
+        # Alpha basé sur l'intensité totale
+        total = curtain1 * 1.3 + curtain2 * 0.9 + curtain3 * 0.7 + curtain4 * 0.5
+        alpha = np.clip(total * 150, 0, 200)
+
+        # Flou pour des rideaux doux et diffus
+        r = self._blur_2d(r, radius=10, passes=2)
+        g = self._blur_2d(g, radius=10, passes=2)
+        b = self._blur_2d(b, radius=10, passes=2)
+        alpha = self._blur_2d(alpha, radius=10, passes=2)
+
+        r = np.clip(r, 0, 255).astype(np.uint8)
+        g = np.clip(g, 0, 255).astype(np.uint8)
+        b = np.clip(b, 0, 255).astype(np.uint8)
+        alpha = np.clip(alpha, 0, 200).astype(np.uint8)
+
+        pixel_array = pygame.surfarray.pixels3d(surface)
+        alpha_array = pygame.surfarray.pixels_alpha(surface)
+
+        pixel_array[:, :, 0] = r.T
+        pixel_array[:, :, 1] = g.T
+        pixel_array[:, :, 2] = b.T
+        alpha_array[:, :] = alpha.T
+
+        del pixel_array
+        del alpha_array
+
+        return surface
+
+    # Réutiliser les méthodes de Background / SpiralNebulaBackground
+    _generate_initial_planets = SpiralNebulaBackground._generate_initial_planets
+    _spawn_new_planet = SpiralNebulaBackground._spawn_new_planet
+    _create_planet_surface = Background._create_planet_surface
+    _create_jupiter_planet = Background._create_jupiter_planet
+    _spawn_shooting_star = Background._spawn_shooting_star
+    _draw_twinkling_stars = Background._draw_twinkling_stars
+    _draw_shooting_stars = Background._draw_shooting_stars
+
+    def update(self):
+        self.time += 1
+
+        # Aurore défile lentement
+        aurora_speed = self.speed * 0.2
+        self.aurora_y1 += aurora_speed
+        self.aurora_y2 += aurora_speed
+        if self.aurora_y1 >= SCREEN_HEIGHT:
+            self.aurora_y1 = -SCREEN_HEIGHT
+        if self.aurora_y2 >= SCREEN_HEIGHT:
+            self.aurora_y2 = -SCREEN_HEIGHT
+
+        # Particules cosmiques
+        for p in self.cosmic_particles:
+            p['x'] += p['drift_x'] + np.sin(self.time * 0.02 + p['phase']) * 0.2
+            p['y'] += self.speed * 0.25
+            if p['y'] > SCREEN_HEIGHT + 5:
+                p['y'] = -5
+                p['x'] = random.randint(0, SCREEN_WIDTH)
+            if p['x'] < -5:
+                p['x'] = SCREEN_WIDTH + 4
+            elif p['x'] > SCREEN_WIDTH + 5:
+                p['x'] = -4
+
+        # Couches d'étoiles avec parallaxe
+        for layer in self.star_layers:
+            layer['y1'] += self.speed * layer['speed_factor']
+            layer['y2'] += self.speed * layer['speed_factor']
+            if layer['y1'] >= SCREEN_HEIGHT:
+                layer['y1'] = -SCREEN_HEIGHT
+            if layer['y2'] >= SCREEN_HEIGHT:
+                layer['y2'] = -SCREEN_HEIGHT
+
+        # Étoiles filantes
+        if self.speed > 0 and random.random() < 0.008:
+            self._spawn_shooting_star()
+
+        stars_to_remove = []
+        for i, star in enumerate(self.shooting_stars):
+            star['x'] += star['vx']
+            star['y'] += star['vy']
+            star['life'] -= star['decay']
+            if star['life'] <= 0 or star['y'] > SCREEN_HEIGHT + 50:
+                stars_to_remove.append(i)
+        for i in reversed(stars_to_remove):
+            self.shooting_stars.pop(i)
+
+        # Planètes
+        planets_to_remove = []
+        for i, planet in enumerate(self.planets):
+            planet['y'] += self.speed * planet['speed_factor']
+            if planet['y'] > SCREEN_HEIGHT + planet['radius'] * 2:
+                planets_to_remove.append(i)
+        for i in reversed(planets_to_remove):
+            self.planets.pop(i)
+
+        if self.stars_layer and len(self.planets) == 0 and random.random() < 0.005:
+            self._spawn_new_planet()
+
+    def _draw_cosmic_particles(self, surface):
+        """Dessine les particules cosmiques lumineuses flottantes."""
+        for p in self.cosmic_particles:
+            pulse = 0.5 + 0.5 * np.sin(self.time * p['pulse_speed'] + p['phase'])
+            size = max(1, int(p['size'] * (0.7 + 0.3 * pulse)))
+
+            # Halo lumineux quand la particule pulse
+            if pulse > 0.6 and size >= 2:
+                glow_alpha = int(40 * (pulse - 0.6) / 0.4)
+                glow_color = (p['color'][0], p['color'][1], p['color'][2], glow_alpha)
+                pygame.draw.circle(surface, glow_color, (int(p['x']), int(p['y'])), size + 2)
+
+            # Point central
+            pygame.draw.circle(surface, p['color'], (int(p['x']), int(p['y'])), size)
+
+    def draw(self, surface):
+        # 1. Fond statique (espace profond avec amas lointains)
+        surface.blit(self.static_bg, (0, 0))
+
+        # 2. Couche d'aurore (défile lentement)
+        surface.blit(self.aurora_layer, (0, int(self.aurora_y1)))
+        surface.blit(self.aurora_layer, (0, int(self.aurora_y2)))
+
+        # 3. Particules cosmiques
+        self._draw_cosmic_particles(surface)
+
+        # 4. Couches d'étoiles avec parallaxe
+        for layer in self.star_layers:
+            surface.blit(layer['surface'], (0, int(layer['y1'])))
+            surface.blit(layer['surface'], (0, int(layer['y2'])))
+
+        # Scintillement
+        self._draw_twinkling_stars(surface)
+
+        # 5. Planètes
+        sorted_planets = sorted(self.planets, key=lambda p: p['radius'], reverse=True)
+        for planet in sorted_planets:
+            surface.blit(planet['surface'], (planet['x'], planet['y']))
+
+        # 6. Étoiles filantes
+        self._draw_shooting_stars(surface)

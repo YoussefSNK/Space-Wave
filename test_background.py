@@ -7,7 +7,7 @@ et observer le rendu en temps réel.
 import pygame
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW
-from graphics.background import Background, SpiralNebulaBackground
+from graphics.background import Background, SpiralNebulaBackground, AuroraBackground
 
 
 def show_menu(screen, font):
@@ -15,6 +15,7 @@ def show_menu(screen, font):
     options = [
         "1 - Nébuleuse Perlin (actuel)",
         "2 - Nébuleuse spirale",
+        "3 - Aurore cosmique",
         "",
         "ESC - Quitter"
     ]
@@ -29,6 +30,7 @@ def show_menu(screen, font):
     colors = [
         (100, 150, 255),   # Bleu pour Perlin
         (180, 100, 255),   # Violet pour spirale
+        (100, 255, 150),   # Vert pour aurore
     ]
 
     for i, option in enumerate(options):
@@ -56,6 +58,8 @@ def run_background_test(bg_type):
         background = Background(speed=2)
     elif bg_type == "Nébuleuse spirale":
         background = SpiralNebulaBackground(speed=2)
+    elif bg_type == "Aurore cosmique":
+        background = AuroraBackground(speed=2)
 
     speed = 2.0
     font = pygame.font.SysFont(None, 36)
@@ -132,6 +136,9 @@ def main():
                         running = False
                 elif event.key == pygame.K_2:
                     if not run_background_test("Nébuleuse spirale"):
+                        running = False
+                elif event.key == pygame.K_3:
+                    if not run_background_test("Aurore cosmique"):
                         running = False
 
     pygame.quit()
