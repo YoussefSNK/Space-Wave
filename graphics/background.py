@@ -153,7 +153,9 @@ class Background:
                             'base_color': base_color,
                             'size': size,
                             'phase': random.uniform(0, 2 * np.pi),
-                            'frequency': random.uniform(1.5, 4.0),
+                            'phase2': random.uniform(0, 2 * np.pi),
+                            'frequency': random.uniform(0.4, 1.2),
+                            'frequency2': random.uniform(0.7, 2.0),
                             'layer': layer_idx
                         })
 
@@ -701,10 +703,15 @@ class Background:
 
     def _draw_twinkling_stars(self, surface):
         """Dessine l'effet de scintillement sur les étoiles sélectionnées."""
+        t = self.time * 0.1
         for star in self.twinkling_stars:
-            # Calculer l'intensité du scintillement
-            twinkle = np.sin(self.time * 0.1 * star['frequency'] + star['phase'])
-            intensity = 0.6 + twinkle * 0.4  # Varie entre 0.2 et 1.0
+            # Superposer deux sinusoïdes pour un effet organique et irrégulier
+            twinkle1 = np.sin(t * star['frequency'] + star['phase'])
+            twinkle2 = np.sin(t * star['frequency2'] + star['phase2'])
+            twinkle = twinkle1 * 0.6 + twinkle2 * 0.4
+            # Normaliser twinkle de [-1, 1] vers [0, 1] avec courbe douce (smoothstep)
+            norm = (twinkle + 1.0) * 0.5  # 0.0 à 1.0
+            norm = norm * norm * (3.0 - 2.0 * norm)  # smoothstep pour transition fluide
 
             # Obtenir la position Y de la couche correspondante
             if hasattr(self, 'star_layers') and star['layer'] < len(self.star_layers):
@@ -712,29 +719,20 @@ class Background:
                 y_offset1 = layer['y1']
                 y_offset2 = layer['y2']
 
-                # Calculer la couleur avec scintillement
-                color = (
-                    int(star['base_color'][0] * intensity),
-                    int(star['base_color'][1] * intensity),
-                    int(star['base_color'][2] * intensity),
-                    int(200 * intensity)
-                )
+                # Halo toujours présent, alpha varie en continu de 5 à 25
+                glow_alpha = int(5 + 20 * norm)
+                glow_size = star['size'] + 1
+                glow_color = (star['base_color'][0], star['base_color'][1], star['base_color'][2], glow_alpha)
 
-                # Dessiner un halo lumineux quand l'étoile est brillante
-                if intensity > 0.8:
-                    glow_size = star['size'] + 2
-                    glow_alpha = int(80 * (intensity - 0.8) / 0.2)
-                    glow_color = (star['base_color'][0], star['base_color'][1], star['base_color'][2], glow_alpha)
+                # Position 1
+                y1 = star['y'] + y_offset1
+                if 0 <= y1 <= SCREEN_HEIGHT:
+                    pygame.draw.circle(surface, glow_color, (star['x'], int(y1)), glow_size)
 
-                    # Position 1
-                    y1 = star['y'] + y_offset1
-                    if 0 <= y1 <= SCREEN_HEIGHT:
-                        pygame.draw.circle(surface, glow_color, (star['x'], int(y1)), glow_size)
-
-                    # Position 2
-                    y2 = star['y'] + y_offset2
-                    if 0 <= y2 <= SCREEN_HEIGHT:
-                        pygame.draw.circle(surface, glow_color, (star['x'], int(y2)), glow_size)
+                # Position 2
+                y2 = star['y'] + y_offset2
+                if 0 <= y2 <= SCREEN_HEIGHT:
+                    pygame.draw.circle(surface, glow_color, (star['x'], int(y2)), glow_size)
 
     def _draw_shooting_stars(self, surface):
         """Dessine les étoiles filantes avec traînée."""
@@ -851,7 +849,9 @@ class SpiralNebulaBackground:
                         'base_color': base_color,
                         'size': size,
                         'phase': random.uniform(0, 2 * np.pi),
-                        'frequency': random.uniform(1.5, 4.0),
+                        'phase2': random.uniform(0, 2 * np.pi),
+                        'frequency': random.uniform(0.4, 1.2),
+                        'frequency2': random.uniform(0.7, 2.0),
                         'layer': layer_idx
                     })
 
@@ -1245,7 +1245,9 @@ class AuroraBackground:
                         'base_color': base_color,
                         'size': size,
                         'phase': random.uniform(0, 2 * np.pi),
-                        'frequency': random.uniform(1.5, 4.0),
+                        'phase2': random.uniform(0, 2 * np.pi),
+                        'frequency': random.uniform(0.4, 1.2),
+                        'frequency2': random.uniform(0.7, 2.0),
                         'layer': layer_idx
                     })
 
