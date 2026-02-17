@@ -772,3 +772,378 @@ class Background:
             # Point brillant à la tête
             head_alpha = int(255 * star['life'])
             pygame.draw.circle(surface, star['color'], (int(star['x']), int(star['y'])), 2)
+
+
+class SpiralNebulaBackground:
+    """Background spatial avec une nébuleuse spirale lointaine qui reste immobile,
+    pendant que les étoiles et planètes défilent normalement."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.planets = []
+        self.shooting_stars = []
+        self.twinkling_stars = []
+        self.time = 0
+        self.planet_colors = [
+            (50, 35, 65),
+            (35, 50, 65),
+            (65, 45, 30),
+            (45, 60, 45),
+            (60, 35, 35),
+            (50, 50, 35),
+        ]
+
+        # Fond statique : espace sombre + nébuleuse spirale (ne défile pas)
+        self.static_bg = self._generate_spiral_background()
+
+        # Couche de poussière/gaz qui défile lentement (très lent pour l'effet de profondeur)
+        self.dust_layer = self._generate_dust_layer()
+        self.dust_y1 = 0
+        self.dust_y2 = -SCREEN_HEIGHT
+
+        # Générer les planètes initiales
+        self._generate_initial_planets()
+
+        # Couches d'étoiles avec parallaxe
+        self.star_layers = []
+        layer_configs = [
+            (0.3, 40, 1),
+            (0.6, 60, 2),
+            (1.0, 50, 3),
+        ]
+
+        star_types = [
+            ((200, 220, 255), 5, [2, 2, 3, 3], [20, 30, 30, 20]),
+            ((255, 255, 255), 15, [1, 2, 2, 3], [30, 35, 25, 10]),
+            ((255, 255, 200), 20, [1, 1, 2, 2], [40, 30, 20, 10]),
+            ((255, 220, 180), 30, [1, 1, 1, 2], [50, 30, 15, 5]),
+            ((255, 200, 180), 30, [1, 1, 1, 1], [60, 25, 10, 5]),
+        ]
+
+        for layer_idx, (speed_factor, num_stars, max_size) in enumerate(layer_configs):
+            layer_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+            for _ in range(num_stars):
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(0, SCREEN_HEIGHT)
+
+                base_color, _, sizes, size_weights = random.choices(
+                    star_types,
+                    weights=[t[1] for t in star_types]
+                )[0]
+
+                size = min(random.choices(sizes, weights=size_weights)[0], max_size)
+
+                brightness_factor = random.uniform(0.5, 0.9) * (0.6 + speed_factor * 0.4)
+                star_color = (
+                    int(base_color[0] * brightness_factor),
+                    int(base_color[1] * brightness_factor),
+                    int(base_color[2] * brightness_factor)
+                )
+
+                pygame.draw.circle(layer_surface, star_color, (x, y), size)
+
+                if size >= 2 and random.random() < 0.3:
+                    self.twinkling_stars.append({
+                        'x': x,
+                        'y': y,
+                        'base_color': base_color,
+                        'size': size,
+                        'phase': random.uniform(0, 2 * np.pi),
+                        'frequency': random.uniform(1.5, 4.0),
+                        'layer': layer_idx
+                    })
+
+            self.star_layers.append({
+                'surface': layer_surface,
+                'speed_factor': speed_factor,
+                'y1': 0,
+                'y2': -SCREEN_HEIGHT
+            })
+
+        self.stars_layer = self.star_layers[-1]['surface'] if self.star_layers else None
+
+        # Pas de scrolling pour le fond statique (la nébuleuse est immobile)
+        self.y1 = 0
+        self.y2 = -SCREEN_HEIGHT
+
+    def _generate_spiral_background(self):
+        """Génère un fond avec une nébuleuse spirale tournante, comme vue de très loin."""
+        surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+        # Base : espace très sombre, légèrement teinté
+        base_r = np.full((SCREEN_HEIGHT, SCREEN_WIDTH), 5, dtype=np.float64)
+        base_g = np.full((SCREEN_HEIGHT, SCREEN_WIDTH), 5, dtype=np.float64)
+        base_b = np.full((SCREEN_HEIGHT, SCREEN_WIDTH), 12, dtype=np.float64)
+
+        # Centre de la spirale (légèrement décentré pour un look naturel)
+        cx = SCREEN_WIDTH * 0.55
+        cy = SCREEN_HEIGHT * 0.4
+
+        # Grille de coordonnées
+        yy, xx = np.mgrid[0:SCREEN_HEIGHT, 0:SCREEN_WIDTH]
+        dx = xx - cx
+        dy = yy - cy
+
+        # Coordonnées polaires
+        dist = np.sqrt(dx * dx + dy * dy)
+        angle = np.arctan2(dy, dx)
+
+        # Rayon max de la spirale
+        max_radius = min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.45
+
+        # Normaliser la distance
+        r_norm = dist / max_radius
+
+        # Bruit de Perlin pour les perturbations
+        shape = (SCREEN_HEIGHT, SCREEN_WIDTH)
+        noise1 = generate_perlin_noise_2d(shape, scale=0.02, octaves=5, persistence=0.6,
+                                          seed=random.randint(0, 10000), tileable_y=False)
+        noise2 = generate_perlin_noise_2d(shape, scale=0.04, octaves=4, persistence=0.5,
+                                          seed=random.randint(0, 10000), tileable_y=False)
+
+        # --- Bras spiraux (spirale logarithmique à 2 bras) ---
+        num_arms = 2
+        tightness = 0.4  # Serrage de la spirale (plus petit = plus serré)
+        arm_width = 0.6  # Largeur angulaire des bras
+
+        # Perturbation de l'angle avec du bruit
+        angle_perturbed = angle + noise1 * 0.8
+
+        # Pour chaque bras spiral
+        spiral_intensity = np.zeros(shape, dtype=np.float64)
+
+        for arm in range(num_arms):
+            arm_offset = arm * (2 * np.pi / num_arms)
+
+            # Spirale logarithmique : angle_spirale = tightness * ln(r)
+            # Distance angulaire au bras
+            spiral_angle = tightness * np.log(np.maximum(r_norm, 0.01)) + arm_offset
+            delta_angle = angle_perturbed - spiral_angle
+
+            # Normaliser entre -pi et pi
+            delta_angle = (delta_angle + np.pi) % (2 * np.pi) - np.pi
+
+            # Intensité gaussienne autour du bras
+            arm_factor = np.exp(-(delta_angle ** 2) / (2 * (arm_width ** 2)))
+
+            # Atténuation radiale (plus faible au centre et aux bords)
+            radial_falloff = np.exp(-((r_norm - 0.5) ** 2) / 0.18)
+
+            # Atténuation douce au-delà du rayon max
+            outer_fade = np.clip(1.0 - (r_norm - 1.0) * 2, 0, 1)
+
+            spiral_intensity += arm_factor * radial_falloff * outer_fade
+
+        # Normaliser
+        spiral_intensity = np.clip(spiral_intensity, 0, 1)
+
+        # Ajouter des perturbations de bruit aux bras
+        spiral_intensity *= (0.7 + noise2 * 0.3)
+
+        # --- Noyau central lumineux ---
+        core_intensity = np.exp(-(dist ** 2) / (2 * (max_radius * 0.12) ** 2))
+
+        # Halo autour du noyau
+        halo_intensity = np.exp(-(dist ** 2) / (2 * (max_radius * 0.3) ** 2)) * 0.3
+
+        # --- Colorisation ---
+        # Bras : dégradé du violet/bleu au cyan selon la distance
+        # Proche du centre : plus chaud (violet/magenta)
+        # Loin du centre : plus froid (bleu/cyan)
+
+        color_blend = np.clip(r_norm, 0, 1)
+
+        # Couleurs des bras
+        arm_r = spiral_intensity * (50 * (1 - color_blend) + 20 * color_blend)
+        arm_g = spiral_intensity * (15 * (1 - color_blend) + 45 * color_blend)
+        arm_b = spiral_intensity * (70 * (1 - color_blend) + 65 * color_blend)
+
+        # Noyau (blanc-jaune chaud)
+        core_r = core_intensity * 120 + halo_intensity * 40
+        core_g = core_intensity * 100 + halo_intensity * 30
+        core_b = core_intensity * 80 + halo_intensity * 45
+
+        # Touches de rose/magenta dans les bras intérieurs
+        inner_glow = spiral_intensity * np.exp(-(r_norm ** 2) / 0.15) * 0.5
+        arm_r += inner_glow * 60
+        arm_g += inner_glow * 10
+        arm_b += inner_glow * 35
+
+        # Combiner
+        base_r += arm_r + core_r
+        base_g += arm_g + core_g
+        base_b += arm_b + core_b
+
+        # Limiter et convertir
+        final_r = np.clip(base_r, 0, 255).astype(np.uint8)
+        final_g = np.clip(base_g, 0, 255).astype(np.uint8)
+        final_b = np.clip(base_b, 0, 255).astype(np.uint8)
+
+        rgb_array = np.stack([final_r, final_g, final_b], axis=-1)
+        surface = pygame.surfarray.make_surface(rgb_array.swapaxes(0, 1))
+
+        return surface
+
+    def _generate_dust_layer(self):
+        """Génère une couche de poussière cosmique semi-transparente qui défile lentement."""
+        surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+        shape = (SCREEN_HEIGHT, SCREEN_WIDTH)
+        noise = generate_perlin_noise_2d(shape, scale=0.03, octaves=4, persistence=0.5,
+                                         seed=random.randint(0, 10000))
+
+        # Convertir en poussière semi-transparente
+        intensity = np.clip((noise - 0.4) / 0.6, 0, 1)
+        intensity = intensity ** 2
+
+        pixel_array = pygame.surfarray.pixels3d(surface)
+        alpha_array = pygame.surfarray.pixels_alpha(surface)
+
+        # Poussière bleutée/violette très subtile
+        pixel_array[:, :, 0] = (intensity * 30).astype(np.uint8).T
+        pixel_array[:, :, 1] = (intensity * 20).astype(np.uint8).T
+        pixel_array[:, :, 2] = (intensity * 45).astype(np.uint8).T
+        alpha_array[:, :] = (intensity * 40).astype(np.uint8).T
+
+        del pixel_array
+        del alpha_array
+
+        return surface
+
+    def _generate_initial_planets(self):
+        """Génère une planète initiale (maximum 1 à l'écran)."""
+        if random.random() < 0.5:
+            x = random.randint(50, SCREEN_WIDTH - 50)
+            y = random.randint(-SCREEN_HEIGHT // 2, SCREEN_HEIGHT // 2)
+            radius = random.randint(20, 50)
+
+            planet_type = random.choice(['standard', 'jupiter'])
+
+            if planet_type == 'standard':
+                base_color = random.choice(self.planet_colors)
+            else:
+                base_color = None
+
+            speed_factor = 0.5 - (radius / 50) * 0.35
+
+            if planet_type == 'standard':
+                planet_surface = self._create_planet_surface(radius, base_color)
+            elif planet_type == 'jupiter':
+                planet_surface = self._create_jupiter_planet(radius)
+
+            self.planets.append({
+                'surface': planet_surface,
+                'x': x - radius - 2,
+                'speed_factor': speed_factor,
+                'y': y,
+                'radius': radius
+            })
+
+    def _spawn_new_planet(self):
+        """Génère une nouvelle planète en haut de l'écran."""
+        x = random.randint(50, SCREEN_WIDTH - 50)
+        y = random.randint(-200, -50)
+        radius = random.randint(20, 50)
+
+        planet_type = random.choice(['standard', 'jupiter'])
+
+        if planet_type == 'standard':
+            base_color = random.choice(self.planet_colors)
+        else:
+            base_color = None
+
+        speed_factor = 0.5 - (radius / 50) * 0.35
+
+        if planet_type == 'standard':
+            planet_surface = self._create_planet_surface(radius, base_color)
+        elif planet_type == 'jupiter':
+            planet_surface = self._create_jupiter_planet(radius)
+
+        self.planets.append({
+            'surface': planet_surface,
+            'x': x - radius - 2,
+            'speed_factor': speed_factor,
+            'y': y,
+            'radius': radius
+        })
+
+    # Réutiliser les méthodes de création de planètes de Background
+    _create_planet_surface = Background._create_planet_surface
+    _create_jupiter_planet = Background._create_jupiter_planet
+    _spawn_shooting_star = Background._spawn_shooting_star
+    _draw_twinkling_stars = Background._draw_twinkling_stars
+    _draw_shooting_stars = Background._draw_shooting_stars
+
+    def update(self):
+        self.time += 1
+
+        # La couche de poussière défile très lentement
+        dust_speed = self.speed * 0.15
+        self.dust_y1 += dust_speed
+        self.dust_y2 += dust_speed
+        if self.dust_y1 >= SCREEN_HEIGHT:
+            self.dust_y1 = -SCREEN_HEIGHT
+        if self.dust_y2 >= SCREEN_HEIGHT:
+            self.dust_y2 = -SCREEN_HEIGHT
+
+        # Mise à jour des couches d'étoiles avec parallaxe
+        for layer in self.star_layers:
+            layer['y1'] += self.speed * layer['speed_factor']
+            layer['y2'] += self.speed * layer['speed_factor']
+            if layer['y1'] >= SCREEN_HEIGHT:
+                layer['y1'] = -SCREEN_HEIGHT
+            if layer['y2'] >= SCREEN_HEIGHT:
+                layer['y2'] = -SCREEN_HEIGHT
+
+        # Spawn aléatoire d'étoiles filantes
+        if self.speed > 0 and random.random() < 0.008:
+            self._spawn_shooting_star()
+
+        # Mise à jour des étoiles filantes
+        stars_to_remove = []
+        for i, star in enumerate(self.shooting_stars):
+            star['x'] += star['vx']
+            star['y'] += star['vy']
+            star['life'] -= star['decay']
+            if star['life'] <= 0 or star['y'] > SCREEN_HEIGHT + 50:
+                stars_to_remove.append(i)
+        for i in reversed(stars_to_remove):
+            self.shooting_stars.pop(i)
+
+        # Mise à jour des planètes
+        planets_to_remove = []
+        for i, planet in enumerate(self.planets):
+            planet['y'] += self.speed * planet['speed_factor']
+            if planet['y'] > SCREEN_HEIGHT + planet['radius'] * 2:
+                planets_to_remove.append(i)
+        for i in reversed(planets_to_remove):
+            self.planets.pop(i)
+
+        if self.stars_layer and len(self.planets) == 0 and random.random() < 0.005:
+            self._spawn_new_planet()
+
+    def draw(self, surface):
+        # 1. Fond statique (nébuleuse spirale immobile)
+        surface.blit(self.static_bg, (0, 0))
+
+        # 2. Couche de poussière (défile très lentement)
+        surface.blit(self.dust_layer, (0, int(self.dust_y1)))
+        surface.blit(self.dust_layer, (0, int(self.dust_y2)))
+
+        # 3. Couches d'étoiles avec parallaxe
+        for layer in self.star_layers:
+            surface.blit(layer['surface'], (0, int(layer['y1'])))
+            surface.blit(layer['surface'], (0, int(layer['y2'])))
+
+        # Scintillement
+        self._draw_twinkling_stars(surface)
+
+        # 4. Planètes
+        sorted_planets = sorted(self.planets, key=lambda p: p['radius'], reverse=True)
+        for planet in sorted_planets:
+            surface.blit(planet['surface'], (planet['x'], planet['y']))
+
+        # 5. Étoiles filantes
+        self._draw_shooting_stars(surface)
