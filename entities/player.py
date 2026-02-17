@@ -3,7 +3,7 @@ import random
 import math
 
 from config import YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT
-from .projectiles import Projectile, SpreadProjectile, RicochetProjectile, ZigZagPlayerProjectile
+from .projectiles import Projectile, SpreadProjectile, RicochetProjectile, ZigZagPlayerProjectile, MissileProjectile
 from resource_path import resource_path
 
 
@@ -294,6 +294,9 @@ class Player:
 
             elif self.power_type == 'zigzag':
                 projectile_list.append(ZigZagPlayerProjectile(cx, cy))
+
+            elif self.power_type == 'missile':
+                projectile_list.append(MissileProjectile(cx, cy))
 
             self.last_shot = now
 

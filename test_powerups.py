@@ -6,11 +6,12 @@ de tester contre des vagues d'ennemis, et de supprimer les pouvoirs actuels.
 
 import pygame
 import random
+import math
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, CYAN
 from entities.player import Player
 from entities.enemy import Enemy
-from entities.projectiles import RicochetProjectile
+from entities.projectiles import RicochetProjectile, MissileProjectile
 from graphics.background import Background
 from graphics.effects import Explosion
 
@@ -92,6 +93,7 @@ def run_powerup_test():
         PowerUpZone(290, 50, 'spread', (0, 255, 100), 'SPREAD'),
         PowerUpZone(410, 50, 'ricochet', (255, 100, 0), 'RICOCHET'),
         PowerUpZone(530, 50, 'zigzag', (255, 0, 200), 'ZIGZAG'),
+        PowerUpZone(650, 50, 'missile', (255, 80, 0), 'MISSILE'),
     ]
 
     # Zone pour supprimer les power-ups
@@ -172,24 +174,45 @@ def run_powerup_test():
         for projectile in projectiles[:]:
             for enemy in enemies[:]:
                 if projectile.rect.colliderect(enemy.rect):
+                    # Gérer le missile : explosion AOE au point d'impact
+                    if isinstance(projectile, MissileProjectile):
+                        impact_x, impact_y = projectile.rect.centerx, projectile.rect.centery
+                        try:
+                            projectiles.remove(projectile)
+                        except ValueError:
+                            pass
+                        explosions.append(Explosion(impact_x, impact_y))
+                        # Dégâts AOE à tous les ennemis dans le rayon
+                        for aoe_enemy in enemies[:]:
+                            dx = aoe_enemy.rect.centerx - impact_x
+                            dy = aoe_enemy.rect.centery - impact_y
+                            dist = math.sqrt(dx * dx + dy * dy)
+                            if dist <= projectile.aoe_radius:
+                                aoe_enemy.hp -= projectile.aoe_damage
+                                if aoe_enemy.hp <= 0 and aoe_enemy in enemies:
+                                    enemies.remove(aoe_enemy)
+                                    explosions.append(Explosion(aoe_enemy.rect.centerx, aoe_enemy.rect.centery))
                     # Gérer le ricochet : le projectile rebondit au lieu d'être détruit
-                    if isinstance(projectile, RicochetProjectile):
+                    elif isinstance(projectile, RicochetProjectile):
                         can_continue = projectile.ricochet()
                         if not can_continue:
                             try:
                                 projectiles.remove(projectile)
                             except ValueError:
                                 pass
+                        enemy.hp -= 1
+                        if enemy.hp <= 0:
+                            enemies.remove(enemy)
+                            explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
                     else:
                         try:
                             projectiles.remove(projectile)
                         except ValueError:
                             pass
-
-                    enemy.hp -= 1
-                    if enemy.hp <= 0:
-                        enemies.remove(enemy)
-                        explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
+                        enemy.hp -= 1
+                        if enemy.hp <= 0:
+                            enemies.remove(enemy)
+                            explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
                     break
 
         # Collisions ennemis -> joueur
@@ -247,7 +270,7 @@ def run_powerup_test():
         # Instructions
         instructions = [
             "Déplacez-vous sur les carrés pour acquérir des power-ups",
-            "Carrés de power-up en haut: DOUBLE, TRIPLE, SPREAD, RICOCHET, ZIGZAG",
+            "Carrés de power-up en haut: DOUBLE, TRIPLE, SPREAD, RICOCHET, ZIGZAG, MISSILE",
             "Carré rouge (CLEAR): supprime les power-ups actuels",
             "Vagues de 5 ennemis toutes les 5 secondes",
             "",

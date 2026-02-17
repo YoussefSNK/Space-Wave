@@ -124,6 +124,49 @@ class ZigZagPlayerProjectile(Projectile):
         self.rect.x += self.direction * self.diagonal_speed
 
 
+class MissileProjectile(Projectile):
+    """Projectile missile qui commence lent puis accélère brutalement.
+    Explose au point d'impact en infligeant des dégâts AOE."""
+    def __init__(self, x, y):
+        super().__init__(x, y, speed=2)  # Commence très lent
+        self.image = pygame.Surface((8, 16))
+        self.image.fill((255, 80, 0))  # Orange-rouge
+        self.rect = self.image.get_rect(center=(x, y))
+        self.timer = 0
+        self.acceleration_frame = 20  # Frame où le missile accélère
+        self.max_speed = 16
+        self.has_accelerated = False
+        self.aoe_radius = 60  # Rayon de l'explosion AOE
+        self.aoe_damage = 1
+
+    def update(self):
+        self.update_trail()
+        self.timer += 1
+
+        # Accélération brutale après un délai
+        if self.timer >= self.acceleration_frame and not self.has_accelerated:
+            self.speed = self.max_speed
+            self.has_accelerated = True
+
+        self.rect.y -= self.speed
+
+    def draw(self, surface):
+        self.draw_trail(surface)
+        # Corps du missile
+        pygame.draw.rect(surface, (255, 80, 0), self.rect)
+        # Pointe du missile
+        tip = [(self.rect.centerx, self.rect.top - 4),
+               (self.rect.left, self.rect.top),
+               (self.rect.right, self.rect.top)]
+        pygame.draw.polygon(surface, (255, 200, 0), tip)
+        # Flamme arrière (plus grande quand accéléré)
+        flame_size = 8 if self.has_accelerated else 3
+        flame = [(self.rect.centerx, self.rect.bottom + flame_size),
+                 (self.rect.left + 1, self.rect.bottom),
+                 (self.rect.right - 1, self.rect.bottom)]
+        pygame.draw.polygon(surface, (255, 255, 0), flame)
+
+
 class EnemyProjectile(TrailedProjectile):
     def __init__(self, x, y, dx, dy, speed=7):
         super().__init__(

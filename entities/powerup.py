@@ -20,6 +20,8 @@ class PowerUp:
             self.color = (255, 100, 0)
         elif power_type == 'zigzag':
             self.color = (255, 0, 200)  # Magenta
+        elif power_type == 'missile':
+            self.color = (255, 80, 0)  # Orange-rouge
         else:
             self.color = WHITE
 
