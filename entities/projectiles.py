@@ -873,6 +873,7 @@ class BallBreakerProjectile(EnemyProjectile):
         self.bounces_left = 4
         self.margin = 10
         self.ball_radius = 24
+        self.spawn_grace = 60  # Invulnérabilité aux collisions balle-balle pendant 1s
 
     def update(self, other_projectiles=None):
         self.update_trail()
@@ -882,8 +883,11 @@ class BallBreakerProjectile(EnemyProjectile):
         self.rect.y += int(self.dy * self.speed)
 
         # Collision avec d'autres balles (EdgeRoller ou BallBreaker) - vérifier AVANT les bords
+        if self.spawn_grace > 0:
+            self.spawn_grace -= 1
+
         ball_collision = False
-        if other_projectiles and self.bounces_left > 0:
+        if other_projectiles and self.bounces_left > 0 and self.spawn_grace <= 0:
             for other in other_projectiles:
                 if other is self:
                     continue
