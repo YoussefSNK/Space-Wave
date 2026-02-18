@@ -102,7 +102,7 @@ class Boss7(Enemy):
             if self.pattern_timer >= 300:
                 # Fin du pattern : passage au suivant
                 self.pattern_timer = 0
-                self.pattern_index = (self.pattern_index + 1) % 2
+                self.pattern_index = (self.pattern_index + 1) % 6
                 self.pattern_step = 0
                 self.pattern_step_timer = 0
 
@@ -110,6 +110,7 @@ class Boss7(Enemy):
 
     def start_pattern(self, player_pos, projectiles_list):
         """Tir immédiat à la première frame du pattern."""
+        cx, cy = self.rect.center
         if self.pattern_index == 0:
             self.pattern_ball_breaker_diagonal(projectiles_list)
         elif self.pattern_index == 1:
@@ -117,11 +118,38 @@ class Boss7(Enemy):
             self.pattern_step_timer = 0
             self._fire_wave_breaker_ball(projectiles_list)
             self.pattern_step = 1
+        elif self.pattern_index == 2:
+            # Éventail : 8 balles en éventail vers le bas (200° à 340°, pas de 20°)
+            for angle in range(200, 360, 20):
+                self._fire_ball_at(cx, cy, angle, projectiles_list)
+        elif self.pattern_index == 3:
+            # Orbite : première balle de la rotation (270° = droit vers le bas)
+            self._fire_ball_at(cx, cy, 270, projectiles_list)
+            self.pattern_step = 1
+            self.pattern_step_timer = 0
+        elif self.pattern_index == 4:
+            # Nova : première salve de 8 balles dans toutes les directions
+            for angle in range(0, 360, 45):
+                self._fire_ball_at(cx, cy, angle, projectiles_list)
+            self.pattern_step = 1
+            self.pattern_step_timer = 0
+        elif self.pattern_index == 5:
+            # Triple Salve : première paire de diagonales
+            self._fire_ball_at(cx - 50, cy, 210, projectiles_list)
+            self._fire_ball_at(cx + 50, cy, 330, projectiles_list)
+            self.pattern_step = 1
+            self.pattern_step_timer = 0
 
     def update_pattern_sequence(self, projectiles_list):
         """Mise à jour des patterns séquentiels (frames 2+)."""
         if self.pattern_index == 1:
             self._update_wave_breaker(projectiles_list)
+        elif self.pattern_index == 3:
+            self._update_orbit(projectiles_list)
+        elif self.pattern_index == 4:
+            self._update_nova(projectiles_list)
+        elif self.pattern_index == 5:
+            self._update_triple_volley(projectiles_list)
 
     def _update_wave_breaker(self, projectiles_list):
         """Pattern 2 : tire les balles restantes une par une toutes les 0.5s."""
@@ -137,19 +165,66 @@ class Boss7(Enemy):
             self._fire_wave_breaker_ball(projectiles_list)
             self.pattern_step += 1
 
+    def _fire_ball_at(self, spawn_x, spawn_y, angle_deg, projectiles_list, speed=8):
+        """Helper : tire une Ball Breaker en direction angle_deg (convention math, y vers le haut)."""
+        angle_rad = math.radians(angle_deg)
+        target_x = spawn_x + math.cos(angle_rad) * 1000
+        target_y = spawn_y - math.sin(angle_rad) * 1000
+        proj = BallBreakerProjectile(spawn_x, spawn_y, target_x, target_y, speed=speed)
+        projectiles_list.append(proj)
+
     def _fire_wave_breaker_ball(self, projectiles_list):
         """Tire une Ball Breaker dans la direction ondulée correspondant à l'étape actuelle."""
         ANGLES = [230, 250, 270, 290, 310]
         cx, cy = self.rect.center
         step = self.pattern_step
-        angle_deg = ANGLES[step]
-        # Positions de spawn de gauche à droite : -100, -50, 0, +50, +100
-        spawn_x = cx - 100 + step * 50
-        angle_rad = math.radians(angle_deg)
-        target_x = spawn_x + math.cos(angle_rad) * 1000
-        target_y = cy - math.sin(angle_rad) * 1000
-        proj = BallBreakerProjectile(spawn_x, cy, target_x, target_y, speed=8)
-        projectiles_list.append(proj)
+        spawn_x = cx - 100 + step * 50  # Gauche à droite : -100, -50, 0, +50, +100
+        self._fire_ball_at(spawn_x, cy, ANGLES[step], projectiles_list)
+
+    def _update_orbit(self, projectiles_list):
+        """Pattern 4 (Orbite) : 12 balles en rotation complète, une toutes les 22 frames."""
+        TOTAL_BALLS = 12
+        STEP_DELAY = 22   # ~0.37s
+        START_ANGLE = 270
+        STEP_ANGLE = -30  # Sens horaire sur l'écran
+
+        if self.pattern_step >= TOTAL_BALLS:
+            return
+
+        self.pattern_step_timer += 1
+        if self.pattern_step_timer >= STEP_DELAY:
+            self.pattern_step_timer = 0
+            angle = (START_ANGLE + self.pattern_step * STEP_ANGLE) % 360
+            cx, cy = self.rect.center
+            self._fire_ball_at(cx, cy, angle, projectiles_list)
+            self.pattern_step += 1
+
+    def _update_nova(self, projectiles_list):
+        """Pattern 5 (Nova) : seconde salve de 8 balles tirée 2.5s après la première."""
+        if self.pattern_step == 1:
+            self.pattern_step_timer += 1
+            if self.pattern_step_timer >= 150:
+                cx, cy = self.rect.center
+                for angle in range(0, 360, 45):
+                    self._fire_ball_at(cx, cy, angle, projectiles_list)
+                self.pattern_step = 2
+
+    def _update_triple_volley(self, projectiles_list):
+        """Pattern 6 (Triple Salve) : 2e et 3e salves diagonales, espacées de 1.5s."""
+        STEP_DELAY = 90  # 1.5 secondes
+        VOLLEY_ANGLES = [(200, 340), (220, 320)]  # Angles légèrement différents à chaque salve
+
+        if self.pattern_step > len(VOLLEY_ANGLES):
+            return
+
+        self.pattern_step_timer += 1
+        if self.pattern_step_timer >= STEP_DELAY:
+            self.pattern_step_timer = 0
+            angles = VOLLEY_ANGLES[self.pattern_step - 1]
+            cx, cy = self.rect.center
+            self._fire_ball_at(cx - 50, cy, angles[0], projectiles_list)
+            self._fire_ball_at(cx + 50, cy, angles[1], projectiles_list)
+            self.pattern_step += 1
 
     def pattern_ball_breaker_diagonal(self, projectiles_list):
         """Pattern 1 : tire Ball Breaker dans les deux diagonales basses (210° et 330°)."""
