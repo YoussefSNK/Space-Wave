@@ -2181,6 +2181,146 @@ class PathWanderProjectile(EnemyProjectile):
             pygame.draw.circle(surface, WHITE, self.rect.center, 6)
 
 
+class FieldDodgerProjectile(EnemyProjectile):
+    """
+    Projectile special du Boss 7 - Field Dodger
+    Balle invisible, reapparait toutes les 0.7s pendant 0.2s.
+    Trajectoire en courbe de Bezier quadratique depuis le boss vers
+    la position initiale du joueur au moment du tir.
+    La hitbox est toujours active meme quand la balle est invisible.
+    """
+    FLASH_INTERVAL = 42   # 0.7s a 60 FPS
+    FLASH_DURATION = 12   # 0.2s a 60 FPS
+
+    def __init__(self, boss_x, boss_y, player_x, player_y, speed=3.0):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=10,
+            trail_color_func=lambda progress, alpha: (255, 80, 180, alpha),
+            trail_size_func=lambda progress: max(2, int(9 * progress))
+        )
+
+        self.image = pygame.Surface((40, 40), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (255, 80, 180), (20, 20), 20)
+        pygame.draw.circle(self.image, (255, 160, 220), (20, 20), 13)
+        pygame.draw.circle(self.image, WHITE, (20, 20), 5)
+        self.rect = self.image.get_rect(center=(boss_x, boss_y))
+
+        self.float_x = float(boss_x)
+        self.float_y = float(boss_y)
+        self.speed = speed
+        self.dx = 0.0
+        self.dy = 0.0
+
+        # Points de la courbe de Bezier quadratique
+        self.p0 = (float(boss_x), float(boss_y))
+        self.p2 = (float(player_x), float(player_y))
+
+        # Point de controle: perpendiculaire au milieu, cote aleatoire
+        vx = player_x - boss_x
+        vy = player_y - boss_y
+        dist = math.sqrt(vx * vx + vy * vy)
+        if dist < 1:
+            dist = 1
+        perp_x = -vy / dist
+        perp_y = vx / dist
+        offset = dist * 0.5 * random.choice([-1, 1])
+        mid_x = (boss_x + player_x) / 2
+        mid_y = (boss_y + player_y) / 2
+        self.p1 = (mid_x + perp_x * offset, mid_y + perp_y * offset)
+
+        # Parametre t de progression le long de la courbe (0 -> 1)
+        self.t = 0.0
+        curve_length = self._estimate_curve_length()
+        self.dt = speed / max(curve_length, 1.0)
+
+        # Direction de sortie apres t=1 (tangente en fin de courbe)
+        self._compute_exit_direction()
+
+        self.timer = 0
+        self.is_visible = False
+        self.flash_alpha = 0
+        self.beyond_curve = False   # True apres avoir depasse t=1
+
+    def _bezier(self, t):
+        """Position sur la courbe de Bezier quadratique au parametre t."""
+        p0x, p0y = self.p0
+        p1x, p1y = self.p1
+        p2x, p2y = self.p2
+        mt = 1 - t
+        x = mt * mt * p0x + 2 * mt * t * p1x + t * t * p2x
+        y = mt * mt * p0y + 2 * mt * t * p1y + t * t * p2y
+        return x, y
+
+    def _estimate_curve_length(self, steps=30):
+        """Estime la longueur de la courbe par echantillonnage."""
+        total = 0.0
+        prev_x, prev_y = self._bezier(0)
+        for i in range(1, steps + 1):
+            x, y = self._bezier(i / steps)
+            dx = x - prev_x
+            dy = y - prev_y
+            total += math.sqrt(dx * dx + dy * dy)
+            prev_x, prev_y = x, y
+        return total
+
+    def _compute_exit_direction(self):
+        """Calcule la direction tangente a la courbe en t=1 (derivee de la Bezier)."""
+        p1x, p1y = self.p1
+        p2x, p2y = self.p2
+        tx = 2 * (p2x - p1x)
+        ty = 2 * (p2y - p1y)
+        length = math.sqrt(tx * tx + ty * ty)
+        if length > 0:
+            self.exit_dx = tx / length
+            self.exit_dy = ty / length
+        else:
+            self.exit_dx = 0.0
+            self.exit_dy = 1.0
+
+    def update(self):
+        self.timer += 1
+
+        # Opacite en fondu: 6 frames 0->50%, 6 frames 50%->0%
+        phase = self.timer % self.FLASH_INTERVAL
+        half = self.FLASH_DURATION // 2  # 6
+        if phase < half:
+            self.flash_alpha = int(phase / (half - 1) * 127)
+        elif phase < self.FLASH_DURATION:
+            remaining = self.FLASH_DURATION - 1 - phase
+            self.flash_alpha = int(remaining / (half - 1) * 127)
+        else:
+            self.flash_alpha = 0
+
+        self.is_visible = self.flash_alpha > 0
+
+        if not self.beyond_curve:
+            self.t += self.dt
+            if self.t >= 1.0:
+                self.t = 1.0
+                self.beyond_curve = True
+            x, y = self._bezier(self.t)
+        else:
+            # Continue en ligne droite dans la direction de sortie
+            x = self.float_x + self.exit_dx * self.speed
+            y = self.float_y + self.exit_dy * self.speed
+
+        self.float_x = x
+        self.float_y = y
+        self.rect.center = (int(self.float_x), int(self.float_y))
+
+    def draw(self, surface):
+        if self.flash_alpha == 0:
+            return
+
+        a = self.flash_alpha
+        ball_surf = pygame.Surface((44, 44), pygame.SRCALPHA)
+        pygame.draw.circle(ball_surf, (255, 80, 180, a), (22, 22), 20)
+        pygame.draw.circle(ball_surf, (255, 160, 220, a), (22, 22), 13)
+        pygame.draw.circle(ball_surf, (255, 255, 255, a), (22, 22), 5)
+        surface.blit(ball_surf, (self.rect.centerx - 22, self.rect.centery - 22))
+
+
 class Boss8Projectile(EnemyProjectile):
     """Projectile du Boss 8 - cristal bleu/cyan prismatique"""
     def __init__(self, x, y, dx, dy, speed=5):
