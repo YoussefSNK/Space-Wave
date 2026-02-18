@@ -17,15 +17,8 @@ class Boss7(Enemy):
         self.speed = speed
         self.target_y = target_y
         self.timer = 0
-        self.shoot_timer = 0
-        self.shoot_delay_frames = 120  # 2 secondes entre chaque tir (60 FPS * 2)
-        self.shoot_count = 0
-        self.pattern = 0
-        self.pattern_timer = 0
-        self.pattern_duration = 360
-        self.next_projectile_type = "ball_breaker"  # Commence avec Ball Breaker
-        self.projectile_cycle = ["ball_breaker", "edge_roller", "curve_stalker", "path_chaser", "path_wander", "field_dodger"]
-        self.projectile_index = 0
+        self.pattern_index = 0         # Pattern actuel
+        self.pattern_cooldown = 60     # Délai initial avant le premier tir (1s)
         self.is_dying = False
         self.death_timer = 0
         self.death_explosions = []
@@ -79,7 +72,6 @@ class Boss7(Enemy):
             return self.update_death()
 
         self.timer += 1
-        self.pattern_timer += 1
         self.pulse_timer += 1
         self.movement_angle += 0.02
 
@@ -95,73 +87,30 @@ class Boss7(Enemy):
             self.rect.centerx = int(base_x)
             self.rect.centery = int(self.target_y + offset_y)
 
-        # Changement de pattern
-        if self.pattern_timer >= self.pattern_duration:
-            self.pattern_timer = 0
-            self.pattern = (self.pattern + 1) % 1  # Pour l'instant un seul pattern
-
-        # Tir
-        self.shoot_timer += 1
-        if self.shoot_timer >= self.shoot_delay_frames and self.rect.centery >= self.target_y:
-            self.shoot_timer = 0
-            self.shoot(player_pos, projectiles_list)
+            # Gestion des patterns
+            if self.pattern_cooldown > 0:
+                self.pattern_cooldown -= 1
+            else:
+                self.execute_pattern(player_pos, projectiles_list)
 
         return False
 
-    def shoot(self, player_pos, projectiles_list):
+    def execute_pattern(self, player_pos, projectiles_list):
+        """Exécute le pattern actuel et enclenche le cooldown."""
+        if self.pattern_index == 0:
+            self.pattern_ball_breaker_diagonal(projectiles_list)
+            self.pattern_cooldown = 300  # 5 secondes (60 * 5)
+
+    def pattern_ball_breaker_diagonal(self, projectiles_list):
+        """Pattern 1 : tire Ball Breaker dans les deux diagonales basses (210° et 330°)."""
         cx, cy = self.rect.center
-        self.shoot_count += 1
-
-        if self.pattern == 0:
-            # Pattern 1: Alterne entre Ball Breaker, Edge Roller et Curve Stalker
-            # Lance 1 balle a la fois, position alternee
-            angle = ((self.shoot_count - 1) % 2) * math.pi + self.timer * 0.05
-            spawn_x = cx + int(math.cos(angle) * 50)
-            spawn_y = cy + int(math.sin(angle) * 30) + 40
-
-            current_type = self.projectile_cycle[self.projectile_index]
-
-            if current_type == "ball_breaker":
-                proj = BallBreakerProjectile(
-                    spawn_x, spawn_y,
-                    player_pos[0], player_pos[1],
-                    speed=8
-                )
-            elif current_type == "edge_roller":
-                proj = EdgeRollerProjectile(
-                    spawn_x, spawn_y,
-                    player_pos[0], player_pos[1],
-                    speed=9
-                )
-            elif current_type == "curve_stalker":
-                # Determine le cote du spawn (gauche ou droite du boss)
-                side = "left" if spawn_x < cx else "right"
-                proj = CurveStalkerProjectile(
-                    spawn_x, spawn_y,
-                    self.rect.left, self.rect.right,
-                    side,
-                    speed=6.5
-                )
-            elif current_type == "path_chaser":
-                proj = PathChaserProjectile(
-                    spawn_x, spawn_y,
-                    speed=20
-                )
-            elif current_type == "path_wander":
-                proj = PathWanderProjectile(
-                    spawn_x, spawn_y,
-                    speed=20
-                )
-            else:  # field_dodger
-                proj = FieldDodgerProjectile(
-                    spawn_x, spawn_y,
-                    player_pos[0], player_pos[1],
-                    speed=3.0
-                )
-
-            # Passer au type suivant dans le cycle
-            self.projectile_index = (self.projectile_index + 1) % len(self.projectile_cycle)
-
+        for angle_deg, offset_x in [(210, -50), (330, 50)]:
+            angle_rad = math.radians(angle_deg)
+            spawn_x = cx + offset_x
+            # Convertit l'angle standard (y vers le haut) en coordonnées écran (y vers le bas)
+            target_x = spawn_x + math.cos(angle_rad) * 1000
+            target_y = cy - math.sin(angle_rad) * 1000
+            proj = BallBreakerProjectile(spawn_x, cy, target_x, target_y, speed=8)
             projectiles_list.append(proj)
 
     def update_death(self):

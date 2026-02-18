@@ -57,9 +57,9 @@ def get_pattern_name(enemy):
 
     elif isinstance(enemy, Boss7):
         patterns = {
-            0: "Balles longeuses de bords"
+            0: "Ball Breaker diagonal (210° / 330°)"
         }
-        return patterns.get(enemy.pattern, "Inconnu")
+        return patterns.get(enemy.pattern_index, "Inconnu")
 
     elif isinstance(enemy, Boss6):
         patterns = {
@@ -517,8 +517,10 @@ def run_test(entity_type):
 
                 # Afficher le pattern actuel
                 pattern_name = get_pattern_name(enemy)
-                if isinstance(enemy, (Boss6, Boss7)):
+                if isinstance(enemy, Boss6):
                     pattern_num = enemy.pattern
+                elif isinstance(enemy, Boss7):
+                    pattern_num = enemy.pattern_index
                 else:
                     pattern_num = getattr(enemy, 'current_pattern', 0)
                 pattern_text = font.render(f"Pattern: {pattern_num} - {pattern_name}", True, (100, 200, 255))
