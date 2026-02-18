@@ -21,6 +21,7 @@ class Boss7(Enemy):
         self.pattern_timer = -59       # Démarre à -59 → 1s de délai initial, puis pattern toutes les 5s
         self.pattern_step = 0          # Sous-étape dans le pattern actif (Pattern 2)
         self.pattern_step_timer = 0    # Timer entre deux sous-étapes (Pattern 2)
+        self.arrived = False           # True dès que le boss a atteint target_y une première fois
         self.is_dying = False
         self.death_timer = 0
         self.death_explosions = []
@@ -78,9 +79,13 @@ class Boss7(Enemy):
         self.movement_angle += 0.02
 
         # Mouvement d'entree
-        if self.rect.centery < self.target_y:
+        if not self.arrived and self.rect.centery < self.target_y:
             self.rect.y += self.speed
         else:
+            if not self.arrived:
+                self.arrived = True
+                print(f"[Boss7] Arrivé en position (timer={self.timer})")
+
             # Mouvement lateral fluide
             offset_x = math.sin(self.movement_angle) * self.movement_amplitude
             offset_y = math.cos(self.movement_angle * 0.7) * (self.movement_amplitude * 0.3)
@@ -110,6 +115,7 @@ class Boss7(Enemy):
 
     def start_pattern(self, player_pos, projectiles_list):
         """Tir immédiat à la première frame du pattern."""
+        print(f"[Boss7] Pattern {self.pattern_index} déclenché (timer={self.timer})")
         cx, cy = self.rect.center
         if self.pattern_index == 0:
             self.pattern_ball_breaker_diagonal(projectiles_list)
