@@ -102,7 +102,7 @@ class Boss7(Enemy):
             if self.pattern_timer >= 300:
                 # Fin du pattern : passage au suivant
                 self.pattern_timer = 0
-                self.pattern_index = (self.pattern_index + 1) % 6
+                self.pattern_index = (self.pattern_index + 1) % 7
                 self.pattern_step = 0
                 self.pattern_step_timer = 0
 
@@ -134,9 +134,17 @@ class Boss7(Enemy):
             self.pattern_step = 1
             self.pattern_step_timer = 0
         elif self.pattern_index == 5:
-            # Triple Salve : première paire de diagonales
-            self._fire_ball_at(cx - 50, cy, 210, projectiles_list)
-            self._fire_ball_at(cx + 50, cy, 330, projectiles_list)
+            # Mix : 2 Edge Rollers + 2 Curve Stalkers, un de chaque côté
+            px, py = player_pos
+            for side, offset in [("left", -60), ("right", 60)]:
+                sx = cx + offset
+                projectiles_list.append(EdgeRollerProjectile(sx, cy, px, py, speed=9))
+                projectiles_list.append(CurveStalkerProjectile(
+                    sx, cy, self.rect.left, self.rect.right, side, speed=6.5
+                ))
+        elif self.pattern_index == 6:
+            # Vague inversée : première balle depuis la droite (310°)
+            self._fire_ball_at(cx + 100, cy, 310, projectiles_list)
             self.pattern_step = 1
             self.pattern_step_timer = 0
 
@@ -148,8 +156,8 @@ class Boss7(Enemy):
             self._update_orbit(projectiles_list)
         elif self.pattern_index == 4:
             self._update_nova(projectiles_list)
-        elif self.pattern_index == 5:
-            self._update_triple_volley(projectiles_list)
+        elif self.pattern_index == 6:
+            self._update_reverse_wave(projectiles_list)
 
     def _update_wave_breaker(self, projectiles_list):
         """Pattern 2 : tire les balles restantes une par une toutes les 0.5s."""
@@ -209,21 +217,27 @@ class Boss7(Enemy):
                     self._fire_ball_at(cx, cy, angle, projectiles_list)
                 self.pattern_step = 2
 
-    def _update_triple_volley(self, projectiles_list):
-        """Pattern 6 (Triple Salve) : 2e et 3e salves diagonales, espacées de 1.5s."""
-        STEP_DELAY = 90  # 1.5 secondes
-        VOLLEY_ANGLES = [(200, 340), (220, 320)]  # Angles légèrement différents à chaque salve
-
-        if self.pattern_step > len(VOLLEY_ANGLES):
-            return
+    def _update_reverse_wave(self, projectiles_list):
+        """Pattern 7 (Vague inversée) : 5 balles de droite à gauche, puis une 6e rapide à 210°."""
+        ANGLES   = [290, 270, 250, 230]          # Steps 1-4 (step 0 déjà tiré dans start_pattern)
+        SPAWNS_X = [50,  0,  -50, -100]          # Offsets cx : +50, 0, -50, -100
+        STEP_DELAY = 6  # 0.1 secondes
 
         self.pattern_step_timer += 1
-        if self.pattern_step_timer >= STEP_DELAY:
-            self.pattern_step_timer = 0
-            angles = VOLLEY_ANGLES[self.pattern_step - 1]
-            cx, cy = self.rect.center
-            self._fire_ball_at(cx - 50, cy, angles[0], projectiles_list)
-            self._fire_ball_at(cx + 50, cy, angles[1], projectiles_list)
+        if self.pattern_step_timer < STEP_DELAY:
+            return
+        self.pattern_step_timer = 0
+
+        cx, cy = self.rect.center
+
+        if self.pattern_step <= len(ANGLES):
+            # Balles 2 à 5 (steps 1-4)
+            idx = self.pattern_step - 1
+            self._fire_ball_at(cx + SPAWNS_X[idx], cy, ANGLES[idx], projectiles_list)
+            self.pattern_step += 1
+        elif self.pattern_step == len(ANGLES) + 1:
+            # 6e balle : rapide à 210°, tirée depuis la gauche
+            self._fire_ball_at(cx - 50, cy, 210, projectiles_list, speed=14)
             self.pattern_step += 1
 
     def pattern_ball_breaker_diagonal(self, projectiles_list):

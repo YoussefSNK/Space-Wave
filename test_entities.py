@@ -62,7 +62,8 @@ def get_pattern_name(enemy):
             2: "Éventail (200° → 340°)",
             3: "Orbite (rotation 360°)",
             4: "Nova (8 directions x2)",
-            5: "Triple Salve (3 bursts)"
+            5: "Mix Edge Roller + Curve Stalker (x2 côtés)",
+            6: "Vague inversée (310° → 230° + finish 210°)"
         }
         return patterns.get(enemy.pattern_index, "Inconnu")
 
