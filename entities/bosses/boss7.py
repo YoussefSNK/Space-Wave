@@ -18,7 +18,9 @@ class Boss7(Enemy):
         self.target_y = target_y
         self.timer = 0
         self.pattern_index = 0         # Pattern actuel
-        self.pattern_cooldown = 60     # Délai initial avant le premier tir (1s)
+        self.pattern_timer = -59       # Démarre à -59 → 1s de délai initial, puis pattern toutes les 5s
+        self.pattern_step = 0          # Sous-étape dans le pattern actif (Pattern 2)
+        self.pattern_step_timer = 0    # Timer entre deux sous-étapes (Pattern 2)
         self.is_dying = False
         self.death_timer = 0
         self.death_explosions = []
@@ -87,19 +89,67 @@ class Boss7(Enemy):
             self.rect.centerx = int(base_x)
             self.rect.centery = int(self.target_y + offset_y)
 
-            # Gestion des patterns
-            if self.pattern_cooldown > 0:
-                self.pattern_cooldown -= 1
-            else:
-                self.execute_pattern(player_pos, projectiles_list)
+            # Gestion des patterns (chaque pattern dure 5s = 300 frames)
+            self.pattern_timer += 1
+
+            if self.pattern_timer == 1:
+                # Première frame du pattern : tir immédiat
+                self.start_pattern(player_pos, projectiles_list)
+            elif self.pattern_timer > 1:
+                # Frames suivantes : mise à jour des patterns séquentiels
+                self.update_pattern_sequence(projectiles_list)
+
+            if self.pattern_timer >= 300:
+                # Fin du pattern : passage au suivant
+                self.pattern_timer = 0
+                self.pattern_index = (self.pattern_index + 1) % 2
+                self.pattern_step = 0
+                self.pattern_step_timer = 0
 
         return False
 
-    def execute_pattern(self, player_pos, projectiles_list):
-        """Exécute le pattern actuel et enclenche le cooldown."""
+    def start_pattern(self, player_pos, projectiles_list):
+        """Tir immédiat à la première frame du pattern."""
         if self.pattern_index == 0:
             self.pattern_ball_breaker_diagonal(projectiles_list)
-            self.pattern_cooldown = 300  # 5 secondes (60 * 5)
+        elif self.pattern_index == 1:
+            self.pattern_step = 0
+            self.pattern_step_timer = 0
+            self._fire_wave_breaker_ball(projectiles_list)
+            self.pattern_step = 1
+
+    def update_pattern_sequence(self, projectiles_list):
+        """Mise à jour des patterns séquentiels (frames 2+)."""
+        if self.pattern_index == 1:
+            self._update_wave_breaker(projectiles_list)
+
+    def _update_wave_breaker(self, projectiles_list):
+        """Pattern 2 : tire les balles restantes une par une toutes les 0.5s."""
+        TOTAL_BALLS = 5
+        STEP_DELAY = 30  # 0.5 secondes (60 FPS * 0.5)
+
+        if self.pattern_step >= TOTAL_BALLS:
+            return  # Toutes les balles tirées, on attend la fin du pattern (pattern_timer >= 300)
+
+        self.pattern_step_timer += 1
+        if self.pattern_step_timer >= STEP_DELAY:
+            self.pattern_step_timer = 0
+            self._fire_wave_breaker_ball(projectiles_list)
+            self.pattern_step += 1
+
+    def _fire_wave_breaker_ball(self, projectiles_list):
+        """Tire une Ball Breaker dans la direction ondulée correspondant à l'étape actuelle."""
+        ANGLES = [230, 250, 270, 290, 310]
+        cx, cy = self.rect.center
+        step = self.pattern_step
+        angle_deg = ANGLES[step]
+        # Positions de spawn de gauche à droite : -100, -50, 0, +50, +100
+        spawn_x = cx - 100 + step * 50
+        angle_rad = math.radians(angle_deg)
+        target_x = spawn_x + math.cos(angle_rad) * 1000
+        target_y = cy - math.sin(angle_rad) * 1000
+        proj = BallBreakerProjectile(spawn_x, cy, target_x, target_y, speed=8)
+        projectiles_list.append(proj)
 
     def pattern_ball_breaker_diagonal(self, projectiles_list):
         """Pattern 1 : tire Ball Breaker dans les deux diagonales basses (210° et 330°)."""

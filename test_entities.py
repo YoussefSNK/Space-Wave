@@ -57,7 +57,8 @@ def get_pattern_name(enemy):
 
     elif isinstance(enemy, Boss7):
         patterns = {
-            0: "Ball Breaker diagonal (210° / 330°)"
+            0: "Ball Breaker diagonal (210° / 330°)",
+            1: "Wave Breaker (230° → 310°)"
         }
         return patterns.get(enemy.pattern_index, "Inconnu")
 
