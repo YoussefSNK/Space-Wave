@@ -1910,6 +1910,277 @@ class PathChaserProjectile(EnemyProjectile):
             pygame.draw.circle(surface, WHITE, self.rect.center, 6)
 
 
+class PathWanderProjectile(EnemyProjectile):
+    """
+    Projectile special du Boss 7 - Path Wander
+    Phase 1: Des points blancs apparaissent successivement sur l'ecran (10 points)
+             places dans 4 quadrants en rotation (HG, HD, BD, BG, HG, ...).
+    Phase 2: La balle est lancee depuis le boss et rejoint chaque point en suivant
+             un arc de cercle (sens horaire). Le diametre du cercle = distance entre
+             les deux points consecutifs.
+    """
+    PHASE_ANNOUNCE = 1
+    PHASE_TRAVEL = 2
+    PHASE_EXIT = 3
+
+    NUM_POINTS = 10
+    ANNOUNCE_INTERVAL = 10
+
+    def __init__(self, x, y, speed=20.0):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=18,
+            trail_color_func=lambda progress, alpha: (200, 220, 255, alpha),
+            trail_size_func=lambda progress: max(2, int(8 * progress))
+        )
+
+        self.image = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (200, 220, 255), (24, 24), 24)
+        pygame.draw.circle(self.image, (220, 235, 255), (24, 24), 16)
+        pygame.draw.circle(self.image, WHITE, (24, 24), 6)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.dx = 0
+        self.dy = 0
+        self.speed = speed
+        self.float_x = float(x)
+        self.float_y = float(y)
+
+        self.phase = self.PHASE_ANNOUNCE
+        self.timer = 0
+        self.boss_x = x
+        self.boss_y = y
+
+        self.waypoints = self._generate_waypoints()
+        self.visible_points = 0
+        self.current_target_index = 0
+        self.point_appear_frames = []
+
+        self.dot_radius = 10
+        self.dot_pulse_timer = 0
+        self.dot_lifetime = 60
+        self.flash_duration = 12
+
+        # Arc de cercle
+        self.arc_center_x = 0
+        self.arc_center_y = 0
+        self.arc_radius = 0
+        self.arc_start_angle = 0
+        self.arc_t = 0  # Parametre de 0 a 1 le long de l'arc
+        self.arc_dt = 0  # Increment par frame
+
+    def _generate_waypoints(self):
+        """Genere les 10 points dans les quadrants HG, HD, BD, BG en rotation.
+        Contraintes entre points consecutifs (parcours horaire):
+        - HG->HD: x doit augmenter
+        - HD->BD: y doit augmenter
+        - BD->BG: x doit diminuer
+        - BG->HG: y doit diminuer
+        """
+        points = []
+        margin = 40
+        mid_x = SCREEN_WIDTH / 2
+        mid_y = SCREEN_HEIGHT / 2
+
+        # Quadrants: 0=HG, 1=HD, 2=BD, 3=BG
+        quadrant_bounds = [
+            (margin, mid_x, margin, mid_y),        # HG
+            (mid_x, SCREEN_WIDTH - margin, margin, mid_y),  # HD
+            (mid_x, SCREEN_WIDTH - margin, mid_y, SCREEN_HEIGHT - margin),  # BD
+            (margin, mid_x, mid_y, SCREEN_HEIGHT - margin),  # BG
+        ]
+
+        for i in range(self.NUM_POINTS):
+            q = i % 4
+            x_min, x_max, y_min, y_max = quadrant_bounds[q]
+
+            for _ in range(50):
+                px = random.uniform(x_min, x_max)
+                py = random.uniform(y_min, y_max)
+
+                if points:
+                    prev_x, prev_y = points[-1]
+                    prev_q = (i - 1) % 4
+                    if prev_q == 0 and q == 1:    # HG -> HD: x augmente
+                        if px <= prev_x:
+                            continue
+                    elif prev_q == 1 and q == 2:  # HD -> BD: y augmente
+                        if py <= prev_y:
+                            continue
+                    elif prev_q == 2 and q == 3:  # BD -> BG: x diminue
+                        if px >= prev_x:
+                            continue
+                    elif prev_q == 3 and q == 0:  # BG -> HG: y diminue
+                        if py >= prev_y:
+                            continue
+
+                points.append((px, py))
+                break
+
+        return points
+
+    def update(self):
+        self.update_trail()
+        self.timer += 1
+        self.dot_pulse_timer += 1
+
+        if self.phase == self.PHASE_ANNOUNCE:
+            self._update_announce()
+        elif self.phase == self.PHASE_TRAVEL:
+            self._update_travel()
+        elif self.phase == self.PHASE_EXIT:
+            self._update_exit()
+
+    def _update_announce(self):
+        """Phase 1: Afficher les points un par un."""
+        expected_visible = min(self.NUM_POINTS, self.timer // self.ANNOUNCE_INTERVAL + 1)
+        while len(self.point_appear_frames) < expected_visible:
+            self.point_appear_frames.append(self.timer)
+        self.visible_points = expected_visible
+
+        last_point_age = self.timer - self.point_appear_frames[-1] if self.point_appear_frames else 0
+        if self.visible_points >= self.NUM_POINTS and last_point_age >= self.dot_lifetime:
+            self.phase = self.PHASE_TRAVEL
+            self.current_target_index = 0
+            self._setup_arc_to_target()
+
+    def _setup_arc_to_target(self):
+        """Prepare l'arc de cercle (quart de cercle) vers le point cible actuel."""
+        target_x, target_y = self.waypoints[self.current_target_index]
+
+        dx = target_x - self.float_x
+        dy = target_y - self.float_y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 1:
+            dist = 1
+
+        # Quart de cercle: la corde subtend pi/2 au centre
+        # chord = r * sqrt(2)  =>  r = dist / sqrt(2)
+        self.arc_radius = dist / math.sqrt(2)
+
+        # Direction normalisee A->B
+        dx_norm = dx / dist
+        dy_norm = dy / dist
+
+        # Centre = milieu + (dist/2) * perpendiculaire horaire a AB
+        # Perpendiculaire horaire en coords ecran (y bas) de (dx_norm, dy_norm) = (-dy_norm, dx_norm)
+        mid_x = (self.float_x + target_x) / 2
+        mid_y = (self.float_y + target_y) / 2
+        self.arc_center_x = mid_x + (dist / 2) * (-dy_norm)
+        self.arc_center_y = mid_y + (dist / 2) * dx_norm
+
+        # Angle de depart (position actuelle par rapport au centre)
+        self.arc_start_angle = math.atan2(
+            self.float_y - self.arc_center_y,
+            self.float_x - self.arc_center_x
+        )
+
+        # Quart de cercle: sweep = pi/2
+        self.arc_t = 0
+        arc_length = (math.pi / 2) * self.arc_radius
+        self.arc_dt = self.speed / arc_length if arc_length > 0 else 1.0
+
+    def _update_travel(self):
+        """Phase 2: Se deplacer le long de l'arc de cercle vers chaque point."""
+        self.arc_t += self.arc_dt
+
+        if self.arc_t >= 1.0:
+            # Arrivee au point cible
+            target_x, target_y = self.waypoints[self.current_target_index]
+            self.float_x = target_x
+            self.float_y = target_y
+            self.rect.center = (int(self.float_x), int(self.float_y))
+            self._advance_to_next_target()
+        else:
+            # Position sur l'arc (sens horaire = angle croissant en coords ecran)
+            angle = self.arc_start_angle + self.arc_t * (math.pi / 2)
+            self.float_x = self.arc_center_x + math.cos(angle) * self.arc_radius
+            self.float_y = self.arc_center_y + math.sin(angle) * self.arc_radius
+            self.rect.center = (int(self.float_x), int(self.float_y))
+
+    def _advance_to_next_target(self):
+        """Passe au point suivant ou en phase de sortie."""
+        self.current_target_index += 1
+
+        if self.current_target_index >= self.NUM_POINTS:
+            # Dernier point atteint -> phase de sortie (direction tangente a l'arc)
+            exit_angle = self.arc_start_angle + math.pi / 2
+            # Tangente au cercle au point final (perpendiculaire au rayon, sens horaire)
+            self.dx = -math.sin(exit_angle)
+            self.dy = math.cos(exit_angle)
+            self.phase = self.PHASE_EXIT
+        else:
+            self._setup_arc_to_target()
+
+    def _update_exit(self):
+        """Phase 3: Quitter l'ecran en ligne droite."""
+        self.float_x += self.dx * self.speed
+        self.float_y += self.dy * self.speed
+        self.rect.center = (int(self.float_x), int(self.float_y))
+
+    def _draw_star_flash(self, surface, px, py, progress):
+        """Dessine un flash d'etoile a l'apparition d'un point."""
+        max_ray_length = 30
+        ray_length = max_ray_length * (1 - progress)
+        alpha = int(255 * (1 - progress * 0.5))
+
+        flash_surf = pygame.Surface((int(ray_length * 2 + 30), int(ray_length * 2 + 30)), pygame.SRCALPHA)
+        cx, cy = flash_surf.get_width() // 2, flash_surf.get_height() // 2
+
+        for angle_deg in range(0, 360, 45):
+            angle = math.radians(angle_deg)
+            length = ray_length if angle_deg % 90 == 0 else ray_length * 0.6
+            end_x = cx + math.cos(angle) * length
+            end_y = cy + math.sin(angle) * length
+            width = max(1, int(3 * (1 - progress)))
+            pygame.draw.line(flash_surf, (255, 255, 255, alpha),
+                           (cx, cy), (int(end_x), int(end_y)), width)
+
+        halo_radius = int(12 * (1 - progress * 0.3))
+        pygame.draw.circle(flash_surf, (255, 255, 220, int(alpha * 0.5)),
+                          (cx, cy), halo_radius)
+
+        surface.blit(flash_surf, (px - flash_surf.get_width() // 2,
+                                   py - flash_surf.get_height() // 2))
+
+    def draw(self, surface):
+        # Dessiner les points de passage
+        for i in range(min(self.visible_points, len(self.waypoints))):
+            wx, wy = self.waypoints[i]
+            px, py = int(wx), int(wy)
+
+            if self.phase == self.PHASE_ANNOUNCE:
+                age = self.timer - self.point_appear_frames[i]
+
+                if age >= self.dot_lifetime:
+                    continue
+
+                if age < self.flash_duration:
+                    flash_progress = age / self.flash_duration
+                    self._draw_star_flash(surface, px, py, flash_progress)
+
+                fade_start = self.dot_lifetime // 2
+                if age >= fade_start:
+                    opacity = 1.0 - (age - fade_start) / (self.dot_lifetime - fade_start)
+                else:
+                    opacity = 1.0
+
+                dot_surf = pygame.Surface((self.dot_radius * 2 + 4, self.dot_radius * 2 + 4), pygame.SRCALPHA)
+                center = self.dot_radius + 2
+                alpha = int(255 * opacity)
+                pygame.draw.circle(dot_surf, (255, 255, 255, alpha), (center, center), self.dot_radius)
+                pygame.draw.circle(dot_surf, (200, 200, 220, int(alpha * 0.8)), (center, center), max(1, self.dot_radius - 3))
+                surface.blit(dot_surf, (px - center, py - center))
+
+        # Dessiner la trainee et la balle en phase 2 et 3
+        if self.phase in (self.PHASE_TRAVEL, self.PHASE_EXIT):
+            self.draw_trail(surface)
+
+            # Couleur bleu/blanc froid
+            pygame.draw.circle(surface, (200, 220, 255), self.rect.center, 24)
+            pygame.draw.circle(surface, (220, 235, 255), self.rect.center, 16)
+            pygame.draw.circle(surface, WHITE, self.rect.center, 6)
+
+
 class Boss8Projectile(EnemyProjectile):
     """Projectile du Boss 8 - cristal bleu/cyan prismatique"""
     def __init__(self, x, y, dx, dy, speed=5):
