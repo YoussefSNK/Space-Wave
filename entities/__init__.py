@@ -1,4 +1,4 @@
-from .enemy import Enemy, ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy
+from .enemy import Enemy, ShootingEnemy, TankEnemy, DashEnemy, SplitterEnemy, SniperEnemy, MineEnemy, ShieldEnemy, GhostEnemy, BomberEnemy, TeleporterEnemy, PulseEnemy, ReflectorEnemy, BurstEnemy, SpinnerEnemy, OrbiterEnemy, LaserDroneEnemy, ArmoredEnemy, ClonerEnemy, HealerEnemy, MagnetEnemy, OverchargedEnemy, SentinelEnemy, EchoEnemy, ChargerEnemy, ShadowEnemy, DrainerEnemy, SwarmEnemy, GridEnemy, FreezerEnemy, DiveEnemy, ScatterEnemy, AnchorEnemy, MirageEnemy, RipperEnemy, ChainEnemy
 from .player import Player
 from .powerup import PowerUp
 from .projectiles import (
