@@ -388,12 +388,15 @@ class Boss8(Enemy):
         by = self.rect.bottom - 40
 
         if pattern_index == 0:
-            # Pluie de cristaux
-            for i in range(7):
-                offset_x = (i - 3) * 45
-                angle_offset = math.sin(self.timer * 0.05 + i * 0.5) * 0.3
-                projectiles.append(CrystalShardProjectile(bx + offset_x, by, angle_offset, 1, speed=5))
-            print("Boss 8: Pluie de cristaux!")
+            # Pendule cristallin : 3 shards qui balaient d'un côté à l'autre
+            pendulum_deg = math.sin(self.timer * 0.05) * 60
+            for offset_deg in [-15, 0, 15]:
+                angle_rad = math.radians(pendulum_deg + offset_deg)
+                dx = math.sin(angle_rad)
+                dy = math.cos(angle_rad)
+                dist = math.sqrt(dx**2 + dy**2)
+                projectiles.append(CrystalShardProjectile(bx, by, dx / dist, dy / dist, speed=5))
+            print("Boss 8: Pendule cristallin!")
 
         elif pattern_index == 1:
             # Rayons prismatiques convergents
@@ -428,28 +431,35 @@ class Boss8(Enemy):
             print("Boss 8: Spirale cristalline!")
 
         elif pattern_index == 4:
-            # Vague de fragments depuis les orbes orbitaux
-            active_fragments = [f for f in self.orbital_fragments if f['active']]
-            for fragment in active_fragments[:4]:
-                fx = self.rect.centerx + math.cos(fragment['angle']) * fragment['radius']
-                fy = self.rect.centery + math.sin(fragment['angle']) * fragment['radius']
-                px, py = player_position
-                dx = px - fx
-                dy = py - fy
-                dist = math.sqrt(dx**2 + dy**2)
-                if dist > 0:
-                    dx /= dist
-                    dy /= dist
-                projectiles.append(CrystalShardProjectile(fx, fy, dx, dy, speed=6))
-            print("Boss 8: Fragments orbitaux!")
+            # Tenailles prismatiques : deux bras qui convergent depuis les côtés, à double vitesse
+            for speed in [4, 6]:
+                # Bras gauche : part de la gauche, s'oriente vers le centre-bas
+                projectiles.append(CrystalShardProjectile(bx - 130, by, 0.5, 0.87, speed=speed))
+                # Bras droit : part de la droite, s'oriente vers le centre-bas
+                projectiles.append(CrystalShardProjectile(bx + 130, by, -0.5, 0.87, speed=speed))
+            print("Boss 8: Tenailles prismatiques!")
 
         elif pattern_index == 5:
-            # Mur ondulant de cristaux
-            for i in range(12):
-                offset_x = (i - 5.5) * 35
-                wave_offset = math.sin(i * 0.6 + self.timer * 0.08) * 0.4
-                projectiles.append(Boss8Projectile(bx + offset_x, by, wave_offset, 1, speed=5))
-            print("Boss 8: Mur cristallin!")
+            # Diffraction prismatique : le prisme décompose la lumière en 3 temps
+            # Sub 0 : rayon central (faisceau incident)
+            # Sub 1 : spectre intérieur — deux shards à ±20° (joueur doit aller au centre)
+            # Sub 2 : spectre extérieur — deux rayons larges décoratifs (joueur souffle)
+            sub = (self.timer // self.shoot_delay_frames) % 3
+            if sub == 0:
+                projectiles.append(PrismBeamProjectile(bx, by, 0, 1, speed=7))
+            elif sub == 1:
+                for angle_deg in [-20, 20]:
+                    angle_rad = math.radians(angle_deg)
+                    dx = math.sin(angle_rad)
+                    dy = math.cos(angle_rad)
+                    projectiles.append(CrystalShardProjectile(bx, by, dx, dy, speed=5))
+            else:
+                for angle_deg in [-50, 50]:
+                    angle_rad = math.radians(angle_deg)
+                    dx = math.sin(angle_rad)
+                    dy = math.cos(angle_rad)
+                    projectiles.append(PrismBeamProjectile(bx, by, dx, dy, speed=4))
+            print("Boss 8: Diffraction prismatique!")
 
         # Patterns du mode shattered
         elif pattern_index == 6 and self.shattered_mode:
