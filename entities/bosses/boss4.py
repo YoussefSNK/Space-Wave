@@ -64,50 +64,121 @@ class Boss4(Enemy):
         surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         center = self.size // 2
 
-        for i in range(12):
-            angle = math.radians(30 * i)
-            inner_radius = 40
-            outer_radius = 70
+        # Couronne solaire externe - rayons longs et diffus
+        for i in range(24):
+            angle = math.radians(15 * i)
+            # Alterner entre rayons longs et courts
+            if i % 2 == 0:
+                outer_radius = 75
+                thickness = 5
+            else:
+                outer_radius = 65
+                thickness = 3
+            inner_radius = 42
             x1 = center + math.cos(angle) * inner_radius
             y1 = center + math.sin(angle) * inner_radius
             x2 = center + math.cos(angle) * outer_radius
             y2 = center + math.sin(angle) * outer_radius
-            pygame.draw.line(surf, (255, 200, 0), (x1, y1), (x2, y2), 4)
+            # Degradé du rayon : orange vif au centre, jaune pale à l'extérieur
+            pygame.draw.line(surf, (255, 180, 30, 200), (x1, y1), (x2, y2), thickness)
+            # Surcouche lumineuse au centre du rayon
+            mid_x = center + math.cos(angle) * (inner_radius + 8)
+            mid_y = center + math.sin(angle) * (inner_radius + 8)
+            pygame.draw.line(surf, (255, 230, 100, 255), (x1, y1), (mid_x, mid_y), thickness + 1)
 
-        pygame.draw.circle(surf, (180, 120, 0), (center, center), 45)
-        pygame.draw.circle(surf, (255, 200, 50), (center, center), 40)
-        pygame.draw.circle(surf, (255, 215, 0), (center, center), 45, 3)
+        # Eruptions solaires (prominences) - 6 grandes flammes
+        for i in range(6):
+            angle = math.radians(60 * i + 15)
+            # Creer une forme de flamme avec plusieurs points
+            base_r = 44
+            tip_r = 72
+            spread = math.radians(12)
+            p1 = (center + math.cos(angle - spread) * base_r,
+                  center + math.sin(angle - spread) * base_r)
+            p2 = (center + math.cos(angle) * tip_r,
+                  center + math.sin(angle) * tip_r)
+            p3 = (center + math.cos(angle + spread) * base_r,
+                  center + math.sin(angle + spread) * base_r)
+            pygame.draw.polygon(surf, (255, 120, 20, 180), [p1, p2, p3])
+            # Coeur lumineux de la flamme
+            inner_tip_r = 60
+            ip1 = (center + math.cos(angle - spread * 0.5) * (base_r + 4),
+                   center + math.sin(angle - spread * 0.5) * (base_r + 4))
+            ip2 = (center + math.cos(angle) * inner_tip_r,
+                   center + math.sin(angle) * inner_tip_r)
+            ip3 = (center + math.cos(angle + spread * 0.5) * (base_r + 4),
+                   center + math.sin(angle + spread * 0.5) * (base_r + 4))
+            pygame.draw.polygon(surf, (255, 200, 60, 220), [ip1, ip2, ip3])
 
-        triangle_size = 25
-        triangle_points = []
-        for i in range(3):
-            angle = math.radians(120 * i - 90)
-            tx = center + math.cos(angle) * triangle_size
-            ty = center + math.sin(angle) * triangle_size
-            triangle_points.append((tx, ty))
-        pygame.draw.polygon(surf, (200, 100, 0), triangle_points)
-        pygame.draw.polygon(surf, (255, 150, 0), triangle_points, 2)
+        # Surface solaire - gradient radial (cercles concentriques)
+        for r in range(45, 15, -1):
+            t = (45 - r) / 30.0  # 0 au bord, 1 au centre
+            red = 255
+            green = int(140 + t * 100)  # 140 -> 240
+            blue = int(20 + t * 80)     # 20 -> 100
+            pygame.draw.circle(surf, (red, green, blue), (center, center), r)
 
-        pygame.draw.circle(surf, (255, 50, 0), (center, center), 15)
-        pygame.draw.circle(surf, (255, 255, 0), (center, center), 10)
-        pygame.draw.circle(surf, WHITE, (center, center), 5)
+        # Taches solaires (details de surface)
+        spots = [(center - 12, center - 8, 6), (center + 10, center + 5, 5),
+                 (center - 5, center + 12, 4), (center + 15, center - 3, 3)]
+        for sx, sy, sr in spots:
+            pygame.draw.circle(surf, (200, 120, 10), (sx, sy), sr)
+            pygame.draw.circle(surf, (220, 150, 30), (sx, sy), sr - 1)
+
+        # Anneau de contour lumineux
+        pygame.draw.circle(surf, (255, 220, 80), (center, center), 45, 3)
+        pygame.draw.circle(surf, (255, 250, 150), (center, center), 43, 1)
+
+        # Noyau incandescent (centre tres lumineux)
+        for r in range(18, 0, -1):
+            t = (18 - r) / 18.0
+            alpha = int(150 + t * 105)
+            red = 255
+            green = int(200 + t * 55)
+            blue = int(100 + t * 155)
+            glow_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (red, green, blue, alpha), (r, r), r)
+            surf.blit(glow_surf, (center - r, center - r))
+
+        # Point blanc central ultra-lumineux
+        pygame.draw.circle(surf, (255, 255, 240), (center, center), 5)
+        pygame.draw.circle(surf, WHITE, (center, center), 3)
 
         return surf
 
     def _create_damaged_sprite(self):
-        """Cree un sprite endommage"""
+        """Cree un sprite endommage - flash rouge/blanc intense"""
         surf = self._create_boss_sprite()
         flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        flash.fill((255, 255, 255, 150))
+        # Flash rouge solaire au lieu de blanc pur
+        center = self.size // 2
+        for r in range(60, 0, -2):
+            t = r / 60.0
+            alpha = int(180 * (1 - t))
+            flash_color = (255, int(100 + 155 * t), int(50 * t), alpha)
+            pygame.draw.circle(flash, flash_color, (center, center), r)
         surf.blit(flash, (0, 0))
         return surf
 
     def _create_shield_sprite(self):
-        """Cree un sprite avec bouclier"""
+        """Cree un sprite avec bouclier solaire"""
         surf = self._create_boss_sprite()
         shield_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        pygame.draw.circle(shield_surf, (255, 215, 0, 100), (self.size//2, self.size//2), 75)
-        pygame.draw.circle(shield_surf, (255, 255, 200, 200), (self.size//2, self.size//2), 75, 3)
+        center = self.size // 2
+        # Bouclier multi-couches avec effet plasma
+        for r in range(78, 68, -1):
+            t = (78 - r) / 10.0
+            alpha = int(40 + t * 60)
+            pygame.draw.circle(shield_surf, (255, 230, 100, alpha), (center, center), r)
+        # Contour du bouclier brillant
+        pygame.draw.circle(shield_surf, (255, 255, 200, 200), (center, center), 78, 3)
+        pygame.draw.circle(shield_surf, (255, 240, 150, 120), (center, center), 74, 2)
+        # Symboles sur le bouclier (arcs)
+        for i in range(6):
+            start_angle = math.radians(60 * i)
+            end_angle = math.radians(60 * i + 40)
+            rect = pygame.Rect(center - 76, center - 76, 152, 152)
+            pygame.draw.arc(shield_surf, (255, 255, 220, 180), rect, start_angle, end_angle, 2)
         surf.blit(shield_surf, (0, 0))
         return surf
 
@@ -291,35 +362,89 @@ class Boss4(Enemy):
 
     def draw(self, surface):
         pulse = abs(math.sin(self.pulse_timer * 0.04)) * 0.3 + 0.7
+        cx, cy = self.rect.centerx, self.rect.centery
 
         if not self.is_dying:
-            aura_size = int(90 * pulse)
-            aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
-            pygame.draw.circle(aura_surf, (255, 200, 0, 30), (aura_size, aura_size), aura_size)
-            surface.blit(aura_surf, (self.rect.centerx - aura_size, self.rect.centery - aura_size))
+            # Halo externe diffus (grande aura chaude)
+            for layer in range(3):
+                aura_size = int((110 + layer * 20) * pulse)
+                alpha = max(0, 25 - layer * 8)
+                aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
+                color = (255, 180 - layer * 40, 0, alpha)
+                pygame.draw.circle(aura_surf, color, (aura_size, aura_size), aura_size)
+                surface.blit(aura_surf, (cx - aura_size, cy - aura_size))
 
+            # Rayons de lumiere dynamiques (corona animee)
+            for i in range(12):
+                angle = math.radians(self.ring_rotation * 1.5 + i * 30)
+                ray_length = 85 + math.sin(self.pulse_timer * 0.06 + i) * 15
+                ray_width = 3 + math.sin(self.pulse_timer * 0.08 + i * 0.5) * 1.5
+                ray_alpha = int(120 + math.sin(self.pulse_timer * 0.1 + i) * 60)
+                ray_surf = pygame.Surface((self.size + 80, self.size + 80), pygame.SRCALPHA)
+                offset = (self.size + 80) // 2
+                rx1 = offset + math.cos(angle) * 48
+                ry1 = offset + math.sin(angle) * 48
+                rx2 = offset + math.cos(angle) * ray_length
+                ry2 = offset + math.sin(angle) * ray_length
+                pygame.draw.line(ray_surf, (255, 220, 80, ray_alpha),
+                                (rx1, ry1), (rx2, ry2), max(1, int(ray_width)))
+                # Rayon interne plus lumineux
+                inner_len = ray_length * 0.7
+                rx3 = offset + math.cos(angle) * inner_len
+                ry3 = offset + math.sin(angle) * inner_len
+                pygame.draw.line(ray_surf, (255, 250, 180, min(255, ray_alpha + 60)),
+                                (rx1, ry1), (rx3, ry3), max(1, int(ray_width + 1)))
+                surface.blit(ray_surf, (cx - offset, cy - offset))
+
+            # Anneaux orbitaux rotatifs
             for i in range(3):
-                ring_radius = 85 + i * 15
-                ring_alpha = 100 - i * 30
+                ring_radius = 88 + i * 14
+                ring_alpha = 90 - i * 25
                 ring_surf = pygame.Surface((ring_radius * 2 + 10, ring_radius * 2 + 10), pygame.SRCALPHA)
-                pygame.draw.circle(ring_surf, (255, 215, 0, ring_alpha),
-                                 (ring_radius + 5, ring_radius + 5), ring_radius, 2)
-                rotated = pygame.transform.rotate(ring_surf, self.ring_rotation * (i + 1) * 0.5)
-                rot_rect = rotated.get_rect(center=(self.rect.centerx, self.rect.centery))
+                # Anneau pointillé (segments d'arc)
+                segments = 8
+                for s in range(segments):
+                    seg_angle_start = (360 / segments) * s
+                    seg_angle_end = seg_angle_start + (360 / segments) * 0.6
+                    rect_bound = pygame.Rect(5, 5, ring_radius * 2, ring_radius * 2)
+                    pygame.draw.arc(ring_surf, (255, 215, 50, ring_alpha),
+                                   rect_bound,
+                                   math.radians(seg_angle_start), math.radians(seg_angle_end), 2)
+                rot_angle = self.ring_rotation * (1 + i * 0.7) * (1 if i % 2 == 0 else -1)
+                rotated = pygame.transform.rotate(ring_surf, rot_angle)
+                rot_rect = rotated.get_rect(center=(cx, cy))
                 surface.blit(rotated, rot_rect)
 
-            for i in range(6):
-                angle = math.radians(self.ring_rotation * 2 + i * 60)
-                orb_x = self.rect.centerx + math.cos(angle) * 80
-                orb_y = self.rect.centery + math.sin(angle) * 50
-                pygame.draw.circle(surface, (255, 200, 0), (int(orb_x), int(orb_y)), 6)
-                pygame.draw.circle(surface, WHITE, (int(orb_x), int(orb_y)), 3)
+            # Orbes orbitales (petites boules de plasma)
+            for i in range(8):
+                angle = math.radians(self.ring_rotation * 2.5 + i * 45)
+                orb_dist = 78 + math.sin(self.pulse_timer * 0.05 + i * 0.8) * 8
+                orb_x = cx + math.cos(angle) * orb_dist
+                orb_y = cy + math.sin(angle) * orb_dist * 0.65
+                orb_size = 4 + math.sin(self.pulse_timer * 0.07 + i) * 2
+                # Lueur de l'orbe
+                glow_r = int(orb_size + 4)
+                glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+                pygame.draw.circle(glow_surf, (255, 200, 50, 60), (glow_r, glow_r), glow_r)
+                surface.blit(glow_surf, (int(orb_x) - glow_r, int(orb_y) - glow_r))
+                pygame.draw.circle(surface, (255, 210, 60), (int(orb_x), int(orb_y)), max(1, int(orb_size)))
+                pygame.draw.circle(surface, (255, 255, 200), (int(orb_x), int(orb_y)), max(1, int(orb_size * 0.5)))
 
         if self.charging and self.charge_timer <= self.charge_warning_duration:
             warning_alpha = int(200 * abs(math.sin(self.charge_timer * 0.4)))
-            warning_surf = pygame.Surface((SCREEN_WIDTH, 100), pygame.SRCALPHA)
-            warning_surf.fill((255, 100, 0, warning_alpha))
+            # Bande de warning plus dramatique
+            warning_surf = pygame.Surface((SCREEN_WIDTH, 120), pygame.SRCALPHA)
+            for wy in range(120):
+                fade = 1.0 - (wy / 120.0)
+                a = int(warning_alpha * fade)
+                pygame.draw.line(warning_surf, (255, 80 + wy // 2, 0, a), (0, wy), (SCREEN_WIDTH, wy))
             surface.blit(warning_surf, (0, self.rect.bottom))
+            # Flash au centre du boss
+            flash_r = int(60 + math.sin(self.charge_timer * 0.6) * 20)
+            flash_surf = pygame.Surface((flash_r * 2, flash_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(flash_surf, (255, 255, 200, int(warning_alpha * 0.5)),
+                             (flash_r, flash_r), flash_r)
+            surface.blit(flash_surf, (cx - flash_r, cy - flash_r))
 
         surface.blit(self.image, self.rect)
 
