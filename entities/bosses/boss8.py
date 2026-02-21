@@ -5,7 +5,7 @@ import math
 from config import SCREEN_WIDTH, WHITE
 from graphics.effects import Explosion
 from entities.enemy import Enemy
-from entities.projectiles import Boss8Projectile, PrismBeamProjectile, CrystalShardProjectile, ReflectingProjectile
+from entities.projectiles import Boss8Projectile, PrismBeamProjectile, CrystalShardProjectile, ReflectingProjectile, CrystalOrbProjectile
 
 
 class Boss8(Enemy):
@@ -76,6 +76,10 @@ class Boss8(Enemy):
         self.shield_duration = 180
         self.shield_cooldown = 0
         self.shield_max_cooldown = 300
+
+        # Vortex orbital
+        self.orbital_vortex_wave = 0
+        self.orbital_vortex_max_waves = 112
 
         # Rayons prismatiques
         self.beam_charging = False
@@ -373,10 +377,12 @@ class Boss8(Enemy):
 
             # Patterns de tir
             if player_position and enemy_projectiles is not None:
+                num_patterns = 9 if self.shattered_mode else 7
+                pattern_index = 6  # TODO: retirer pour le jeu final
+                if pattern_index != 6:
+                    self.orbital_vortex_wave = 0
                 if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
                     self.last_shot_frame = self.timer
-                    num_patterns = 8 if self.shattered_mode else 6
-                    pattern_index = (self.timer // self.pattern_switch_interval) % num_patterns
                     self.current_pattern = pattern_index
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
@@ -461,8 +467,27 @@ class Boss8(Enemy):
                     projectiles.append(PrismBeamProjectile(bx, by, dx, dy, speed=4))
             print("Boss 8: Diffraction prismatique!")
 
+        elif pattern_index == 6:
+            # Vortex orbital cristallin - 4 cercles d'orbes en expansion lineaire jusqu'a 2000px
+            # Un nouveau cercle est spawn a chaque appel (tous les shoot_delay_frames)
+            if self.orbital_vortex_wave < self.orbital_vortex_max_waves:
+                w = self.orbital_vortex_wave
+                angle_offset = (math.pi / 8) * w
+                base_color = w * (math.pi / 2)
+                for i in range(8):
+                    angle = (2 * math.pi / 8) * i + angle_offset
+                    projectiles.append(CrystalOrbProjectile(
+                        self, angle,
+                        color_offset=base_color + angle * 0.3,
+                        radius_growth=5.0,
+                        angular_vel=0.015
+                    ))
+                self.orbital_vortex_wave += 1
+                if self.orbital_vortex_wave == 1:
+                    print("Boss 8: Vortex orbital cristallin!")
+
         # Patterns du mode shattered
-        elif pattern_index == 6 and self.shattered_mode:
+        elif pattern_index == 7 and self.shattered_mode:
             # Explosion de fragments dans toutes les directions
             for i in range(16):
                 angle = (2 * math.pi / 16) * i + self.timer * 0.08
@@ -471,7 +496,7 @@ class Boss8(Enemy):
                 projectiles.append(CrystalShardProjectile(bx, by, dx, dy, speed=6))
             print("Boss 8: EXPLOSION CRISTALLINE!")
 
-        elif pattern_index == 7 and self.shattered_mode:
+        elif pattern_index == 8 and self.shattered_mode:
             # Chaos total - mélange de tous les types
             projectiles.append(PrismBeamProjectile(bx, by, 0, 1, speed=7))
             projectiles.append(ReflectingProjectile(bx - 60, by, 0.2, 1, speed=5, reflections=2))

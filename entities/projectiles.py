@@ -2516,6 +2516,103 @@ class ReflectingProjectile(EnemyProjectile):
         pygame.draw.circle(surface, WHITE, self.rect.center, 2)
 
 
+class CrystalOrbProjectile(EnemyProjectile):
+    """Orbe cristallin orbital du Boss 8 - cercle qui s'etend lineairement jusqu'a 2000px"""
+    def __init__(self, boss_ref, angle, color_offset=0,
+                 radius_growth=5.0, angular_vel=0.05):
+        TrailedProjectile.__init__(
+            self,
+            max_trail_length=14,
+            trail_color_func=lambda progress, alpha, co=color_offset: (
+                int(127 + 127 * math.sin(progress * 5 + co)),
+                int(127 + 127 * math.sin(progress * 5 + co + 2.094)),
+                int(127 + 127 * math.sin(progress * 5 + co + 4.189)),
+                alpha
+            ),
+            trail_size_func=lambda progress: max(3, int(10 * progress))
+        )
+        self.image = pygame.Surface((20, 20), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(center=(boss_ref.rect.centerx, boss_ref.rect.centery))
+        self.dx = 0
+        self.dy = 0
+        self.speed = 0
+
+        self.boss_ref = boss_ref
+        self.orbit_angle = angle
+        self.orbit_radius = 65.0
+        self.radius_growth = radius_growth
+        self.angular_velocity = angular_vel
+        self.color_offset = color_offset
+        self.timer = 0
+        self.dead = False
+
+        x = boss_ref.rect.centerx + math.cos(angle) * self.orbit_radius
+        y = boss_ref.rect.centery + math.sin(angle) * self.orbit_radius
+        self.rect.center = (int(x), int(y))
+
+    def update(self):
+        self.timer += 1
+        self.update_trail()
+
+        self.orbit_angle += self.angular_velocity
+        self.orbit_radius += self.radius_growth
+
+        if self.orbit_radius > 2000:
+            self.dead = True
+            return
+
+        x = self.boss_ref.rect.centerx + math.cos(self.orbit_angle) * self.orbit_radius
+        y = self.boss_ref.rect.centery + math.sin(self.orbit_angle) * self.orbit_radius
+        self.rect.center = (int(x), int(y))
+
+    def draw(self, surface):
+        if self.dead:
+            return
+        self.draw_trail(surface)
+
+        hue = self.timer * 0.08 + self.color_offset
+        r = int(127 + 127 * math.sin(hue))
+        g = int(127 + 127 * math.sin(hue + 2.094))
+        b = int(127 + 127 * math.sin(hue + 4.189))
+        color = (r, g, b)
+        lighter = (min(255, r + 100), min(255, g + 100), min(255, b + 100))
+
+        pulse = abs(math.sin(self.timer * 0.12)) * 2
+        size = int(9 + pulse)
+        spin = self.orbit_angle * 0.5
+
+        # Corps hexagonal (comme le boss)
+        hex_pts = []
+        for i in range(6):
+            ha = math.radians(60 * i) + spin
+            hex_pts.append((
+                self.rect.centerx + math.cos(ha) * size,
+                self.rect.centery + math.sin(ha) * size
+            ))
+        pygame.draw.polygon(surface, (color[0] // 2, color[1] // 2, color[2] // 2), hex_pts)
+        pygame.draw.polygon(surface, color, hex_pts, 2)
+
+        # 8 mini-pointes cristallines (comme le boss)
+        for i in range(8):
+            tip_angle = math.radians(45 * i) + spin
+            tip_x = self.rect.centerx + math.cos(tip_angle) * (size + 5)
+            tip_y = self.rect.centery + math.sin(tip_angle) * (size + 5)
+            left_x = self.rect.centerx + math.cos(tip_angle - 0.35) * (size - 1)
+            left_y = self.rect.centery + math.sin(tip_angle - 0.35) * (size - 1)
+            right_x = self.rect.centerx + math.cos(tip_angle + 0.35) * (size - 1)
+            right_y = self.rect.centery + math.sin(tip_angle + 0.35) * (size - 1)
+            crystal_pts = [
+                (int(tip_x), int(tip_y)),
+                (int(left_x), int(left_y)),
+                (int(right_x), int(right_y))
+            ]
+            pygame.draw.polygon(surface, color, crystal_pts, 1)
+
+        # Noyau lumineux central
+        pygame.draw.circle(surface, lighter, self.rect.center, 4)
+        pygame.draw.circle(surface, WHITE, self.rect.center, 2)
+
+
 # ============================================================
 # PROJECTILES DU BOSS 9 - VOID PHOENIX
 # ============================================================
