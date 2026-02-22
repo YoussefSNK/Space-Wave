@@ -54,6 +54,11 @@ class Boss4(Enemy):
         self.charge_duration = 120
         self.charge_warning_duration = 60
         self.original_y = 0
+        self.original_x = 0
+        self.swoop_phase = 0  # 0=warning, 1=centering, 2=swoop curve
+        self.swoop_angle = 0.0  # angle along the swoop ellipse
+        self.swoop_center_x = SCREEN_WIDTH // 2  # cible X pour le centrage
+        self.swoop_centering_speed = 3
 
         self.pulse_timer = 0
         self.ring_rotation = 0
@@ -235,17 +240,59 @@ class Boss4(Enemy):
 
         if self.charging:
             self.charge_timer += 1
-            if self.charge_timer <= self.charge_warning_duration:
-                shake = random.randint(-3, 3)
-                self.rect.x += shake
-            elif self.charge_timer <= self.charge_warning_duration + 30:
-                self.rect.y += 15
-            else:
-                if self.rect.centery > self.original_y:
-                    self.rect.y -= 5
+            if self.swoop_phase == 0:
+                # Phase d'annonce : tremblement
+                if self.charge_timer <= self.charge_warning_duration:
+                    shake = random.randint(-3, 3)
+                    self.rect.x += shake
                 else:
+                    # Passer au centrage fluide
+                    self.swoop_phase = 1
+                    self.swoop_center_x = SCREEN_WIDTH // 2
+            elif self.swoop_phase == 1:
+                # Phase de centrage : le boss se déplace fluidement vers le centre
+                diff_x = self.swoop_center_x - self.rect.centerx
+                diff_y = self.target_y - self.rect.centery
+                if abs(diff_x) <= self.swoop_centering_speed and abs(diff_y) <= self.swoop_centering_speed:
+                    self.rect.centerx = self.swoop_center_x
+                    self.rect.centery = self.target_y
+                    self.swoop_phase = 2
+                    self.swoop_angle = 0.0
+                    self.original_x = self.rect.centerx
+                    self.original_y = self.rect.centery
+                else:
+                    if abs(diff_x) > self.swoop_centering_speed:
+                        self.rect.centerx += self.swoop_centering_speed if diff_x > 0 else -self.swoop_centering_speed
+                    else:
+                        self.rect.centerx = self.swoop_center_x
+                    if abs(diff_y) > self.swoop_centering_speed:
+                        self.rect.centery += self.swoop_centering_speed if diff_y > 0 else -self.swoop_centering_speed
+                    else:
+                        self.rect.centery = self.target_y
+            elif self.swoop_phase == 2:
+                # Courbe style Angry Sun
+                # L'ellipse est centrée en dessous du boss (original_y + radius_y)
+                # Au début (angle=PI/2), sin=1 => y = center_y - radius_y = original_y (position de départ)
+                # Puis le boss descend à gauche, passe en bas, remonte à droite
+                swoop_speed = 0.035
+                self.swoop_angle += swoop_speed
+                radius_x = 300
+                radius_y = 380
+                center_y = self.original_y + radius_y  # centre de l'ellipse = en dessous du boss
+                angle = math.pi / 2 - self.swoop_angle  # sens horaire
+                self.rect.centerx = self.original_x - int(math.cos(angle) * radius_x)
+                self.rect.centery = center_y - int(math.sin(angle) * radius_y)
+                # Fin du swoop après un tour complet
+                if self.swoop_angle >= 2 * math.pi:
                     self.charging = False
                     self.charge_timer = 0
+                    self.swoop_phase = 0
+                    self.swoop_angle = 0.0
+                    # Resynchroniser movement_angle pour que le mouvement normal
+                    # reprenne depuis le centre (sin(0)=0, sin(PI)=0)
+                    self.movement_angle = 0.0
+                    self.rect.centerx = self.original_x
+                    self.rect.centery = self.original_y
             return False
 
         if not self.in_position:
@@ -346,8 +393,11 @@ class Boss4(Enemy):
             if not self.charging and self.timer % 300 < 10:
                 self.charging = True
                 self.charge_timer = 0
+                self.swoop_phase = 0
+                self.swoop_angle = 0.0
+                self.original_x = self.rect.centerx
                 self.original_y = self.rect.centery
-                print("Boss 4: CHARGE!")
+                print("Boss 4: SWOOP!")
 
         return projectiles
 
