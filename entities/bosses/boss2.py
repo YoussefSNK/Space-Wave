@@ -15,6 +15,7 @@ class Boss2(Enemy):
 
         self.size = 120
         self.expression = "neutral"
+        self.hurt_transition = 0.0
         self.image = self._create_boss_sprite()
         self.rect = self.image.get_rect(center=(x, y))
         self.hp = 30
@@ -52,6 +53,8 @@ class Boss2(Enemy):
         self.no_damage_timer = 0
         self.no_damage_threshold = 900  # 15 secondes a 60 FPS
 
+        self.hurt_transition_speed = 0.12  # ~8 frames pour transition complete
+
     def _create_boss_sprite(self, expression=None):
         """Cree un sprite procedural pour le Boss 2"""
         if expression is None:
@@ -79,16 +82,9 @@ class Boss2(Enemy):
         left_eye_x = center - 20
         right_eye_x = center + 20
         eye_y = center - 10
+        t = self.hurt_transition
 
-        if expression == "hurt":
-            # Oeil gauche : >
-            pygame.draw.line(surf, (255, 0, 0), (left_eye_x - 8, eye_y - 8), (left_eye_x + 4, eye_y), 5)
-            pygame.draw.line(surf, (255, 0, 0), (left_eye_x + 4, eye_y), (left_eye_x - 8, eye_y + 8), 5)
-            # Oeil droit : <
-            pygame.draw.line(surf, (255, 0, 0), (right_eye_x + 8, eye_y - 8), (right_eye_x - 4, eye_y), 5)
-            pygame.draw.line(surf, (255, 0, 0), (right_eye_x - 4, eye_y), (right_eye_x + 8, eye_y + 8), 5)
-
-        elif expression == "raised_eyebrow":
+        if expression == "raised_eyebrow":
             # Yeux normaux
             pygame.draw.circle(surf, (255, 0, 0), (left_eye_x, eye_y), 12)
             pygame.draw.circle(surf, (255, 0, 0), (right_eye_x, eye_y), 12)
@@ -96,28 +92,50 @@ class Boss2(Enemy):
             pygame.draw.circle(surf, (255, 255, 0), (right_eye_x, eye_y), 6)
             # Sourcil gauche : arc arrondi
             eyebrow_points = []
-            for t in range(9):
-                frac = t / 8
+            for i in range(9):
+                frac = i / 8
                 bx = left_eye_x - 8 + frac * 16
                 by = eye_y - 16 - math.sin(frac * math.pi) * 8
                 eyebrow_points.append((bx, by))
             pygame.draw.lines(surf, (255, 0, 0), False, eyebrow_points, 4)
-            # Sourcil droit : plat abaisse —
+            # Sourcil droit : plat abaisse
             pygame.draw.line(surf, (255, 0, 0), (right_eye_x - 12, eye_y - 12), (right_eye_x + 12, eye_y - 12), 4)
 
         else:
-            # Neutre - design original
-            pygame.draw.circle(surf, (255, 0, 0), (left_eye_x, eye_y), 12)
-            pygame.draw.circle(surf, (255, 0, 0), (right_eye_x, eye_y), 12)
-            pygame.draw.circle(surf, (255, 255, 0), (left_eye_x, eye_y), 6)
-            pygame.draw.circle(surf, (255, 255, 0), (right_eye_x, eye_y), 6)
+            # Morphing entre neutral (t=0) et hurt (t=1)
+            # Cercles qui retrecissent
+            circle_radius_outer = int(12 * (1 - t))
+            circle_radius_inner = int(6 * (1 - t))
+            circle_green = int(255 * (1 - t))
+
+            if circle_radius_outer > 0:
+                pygame.draw.circle(surf, (255, 0, 0), (left_eye_x, eye_y), circle_radius_outer)
+                pygame.draw.circle(surf, (255, 0, 0), (right_eye_x, eye_y), circle_radius_outer)
+            if circle_radius_inner > 0:
+                pygame.draw.circle(surf, (255, circle_green, 0), (left_eye_x, eye_y), circle_radius_inner)
+                pygame.draw.circle(surf, (255, circle_green, 0), (right_eye_x, eye_y), circle_radius_inner)
+
+            # Chevrons qui apparaissent
+            if t > 0:
+                chevron_thickness = max(1, int(5 * t))
+                chevron_alpha = int(255 * t)
+                chevron_color = (255, 0, 0, chevron_alpha)
+
+                chevron_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+                # Oeil gauche : >
+                pygame.draw.line(chevron_surf, chevron_color, (left_eye_x - 8, eye_y - 8), (left_eye_x + 4, eye_y), chevron_thickness)
+                pygame.draw.line(chevron_surf, chevron_color, (left_eye_x + 4, eye_y), (left_eye_x - 8, eye_y + 8), chevron_thickness)
+                # Oeil droit : <
+                pygame.draw.line(chevron_surf, chevron_color, (right_eye_x + 8, eye_y - 8), (right_eye_x - 4, eye_y), chevron_thickness)
+                pygame.draw.line(chevron_surf, chevron_color, (right_eye_x - 4, eye_y), (right_eye_x + 8, eye_y + 8), chevron_thickness)
+                surf.blit(chevron_surf, (0, 0))
 
         # Bouche
         pygame.draw.line(surf, (255, 0, 0), (center - 25, center + 20), (center + 25, center + 20), 3)
 
     def _create_damaged_sprite(self):
         """Cree un sprite endommage"""
-        surf = self._create_boss_sprite("hurt")
+        surf = self._create_boss_sprite()
         flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         flash.fill((255, 255, 255, 100))
         surf.blit(flash, (0, 0))
@@ -157,21 +175,29 @@ class Boss2(Enemy):
         self.no_damage_timer += 1
         if self.no_damage_timer >= self.no_damage_threshold and self.expression != "raised_eyebrow":
             self.expression = "raised_eyebrow"
-            if not self.damage_animation_active:
-                self.image = self._create_boss_sprite()
+
+        # Transition fluide vers/depuis hurt
+        prev_t = self.hurt_transition
+        if self.expression == "hurt":
+            self.hurt_transition = min(1.0, self.hurt_transition + self.hurt_transition_speed)
+        else:
+            self.hurt_transition = max(0.0, self.hurt_transition - self.hurt_transition_speed)
 
         if self.damage_animation_active:
             self.damage_animation_timer += 1
             if (self.damage_animation_timer // self.damage_flash_interval) % 2 == 0:
                 self.image = self._create_damaged_sprite()
             else:
-                self.image = self._create_boss_sprite("hurt")
+                self.image = self._create_boss_sprite()
 
             if self.damage_animation_timer >= self.damage_animation_duration:
                 self.damage_animation_active = False
                 self.damage_animation_timer = 0
                 self.expression = "neutral"
                 self.image = self._create_boss_sprite()
+        elif prev_t != self.hurt_transition:
+            # Transition en cours, regenerer le sprite
+            self.image = self._create_boss_sprite()
 
         if not self.in_position:
             if self.rect.centery < self.target_y:
