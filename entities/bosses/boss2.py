@@ -82,11 +82,11 @@ class Boss2(Enemy):
 
         if expression == "hurt":
             # Oeil gauche : >
-            pygame.draw.line(surf, (255, 255, 0), (left_eye_x - 8, eye_y - 8), (left_eye_x + 4, eye_y), 3)
-            pygame.draw.line(surf, (255, 255, 0), (left_eye_x + 4, eye_y), (left_eye_x - 8, eye_y + 8), 3)
+            pygame.draw.line(surf, (255, 0, 0), (left_eye_x - 8, eye_y - 8), (left_eye_x + 4, eye_y), 5)
+            pygame.draw.line(surf, (255, 0, 0), (left_eye_x + 4, eye_y), (left_eye_x - 8, eye_y + 8), 5)
             # Oeil droit : <
-            pygame.draw.line(surf, (255, 255, 0), (right_eye_x + 8, eye_y - 8), (right_eye_x - 4, eye_y), 3)
-            pygame.draw.line(surf, (255, 255, 0), (right_eye_x - 4, eye_y), (right_eye_x + 8, eye_y + 8), 3)
+            pygame.draw.line(surf, (255, 0, 0), (right_eye_x + 8, eye_y - 8), (right_eye_x - 4, eye_y), 5)
+            pygame.draw.line(surf, (255, 0, 0), (right_eye_x - 4, eye_y), (right_eye_x + 8, eye_y + 8), 5)
 
         elif expression == "raised_eyebrow":
             # Yeux normaux
