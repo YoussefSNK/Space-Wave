@@ -14,6 +14,7 @@ class Boss2(Enemy):
         super().__init__(x, y, speed)
 
         self.size = 120
+        self.expression = "neutral"
         self.image = self._create_boss_sprite()
         self.rect = self.image.get_rect(center=(x, y))
         self.hp = 30
@@ -48,8 +49,14 @@ class Boss2(Enemy):
 
         self.pulse_timer = 0
 
-    def _create_boss_sprite(self):
+        self.no_damage_timer = 0
+        self.no_damage_threshold = 900  # 15 secondes a 60 FPS
+
+    def _create_boss_sprite(self, expression=None):
         """Cree un sprite procedural pour le Boss 2"""
+        if expression is None:
+            expression = self.expression
+
         surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         center = self.size // 2
 
@@ -63,18 +70,54 @@ class Boss2(Enemy):
         pygame.draw.polygon(surf, (80, 0, 120), points)
         pygame.draw.polygon(surf, (150, 0, 200), points, 3)
 
-        pygame.draw.circle(surf, (255, 0, 0), (center - 20, center - 10), 12)
-        pygame.draw.circle(surf, (255, 0, 0), (center + 20, center - 10), 12)
-        pygame.draw.circle(surf, (255, 255, 0), (center - 20, center - 10), 6)
-        pygame.draw.circle(surf, (255, 255, 0), (center + 20, center - 10), 6)
-
-        pygame.draw.line(surf, (255, 0, 0), (center - 25, center + 20), (center + 25, center + 20), 3)
+        self._draw_face(surf, center, expression)
 
         return surf
 
+    def _draw_face(self, surf, center, expression):
+        """Dessine le visage du boss selon l'expression"""
+        left_eye_x = center - 20
+        right_eye_x = center + 20
+        eye_y = center - 10
+
+        if expression == "hurt":
+            # Oeil gauche : >
+            pygame.draw.line(surf, (255, 255, 0), (left_eye_x - 8, eye_y - 8), (left_eye_x + 4, eye_y), 3)
+            pygame.draw.line(surf, (255, 255, 0), (left_eye_x + 4, eye_y), (left_eye_x - 8, eye_y + 8), 3)
+            # Oeil droit : <
+            pygame.draw.line(surf, (255, 255, 0), (right_eye_x + 8, eye_y - 8), (right_eye_x - 4, eye_y), 3)
+            pygame.draw.line(surf, (255, 255, 0), (right_eye_x - 4, eye_y), (right_eye_x + 8, eye_y + 8), 3)
+
+        elif expression == "raised_eyebrow":
+            # Yeux normaux
+            pygame.draw.circle(surf, (255, 0, 0), (left_eye_x, eye_y), 12)
+            pygame.draw.circle(surf, (255, 0, 0), (right_eye_x, eye_y), 12)
+            pygame.draw.circle(surf, (255, 255, 0), (left_eye_x, eye_y), 6)
+            pygame.draw.circle(surf, (255, 255, 0), (right_eye_x, eye_y), 6)
+            # Sourcil gauche : arc arrondi
+            eyebrow_points = []
+            for t in range(9):
+                frac = t / 8
+                bx = left_eye_x - 8 + frac * 16
+                by = eye_y - 16 - math.sin(frac * math.pi) * 8
+                eyebrow_points.append((bx, by))
+            pygame.draw.lines(surf, (255, 0, 0), False, eyebrow_points, 4)
+            # Sourcil droit : plat abaisse —
+            pygame.draw.line(surf, (255, 0, 0), (right_eye_x - 12, eye_y - 12), (right_eye_x + 12, eye_y - 12), 4)
+
+        else:
+            # Neutre - design original
+            pygame.draw.circle(surf, (255, 0, 0), (left_eye_x, eye_y), 12)
+            pygame.draw.circle(surf, (255, 0, 0), (right_eye_x, eye_y), 12)
+            pygame.draw.circle(surf, (255, 255, 0), (left_eye_x, eye_y), 6)
+            pygame.draw.circle(surf, (255, 255, 0), (right_eye_x, eye_y), 6)
+
+        # Bouche
+        pygame.draw.line(surf, (255, 0, 0), (center - 25, center + 20), (center + 25, center + 20), 3)
+
     def _create_damaged_sprite(self):
         """Cree un sprite endommage"""
-        surf = self._create_boss_sprite()
+        surf = self._create_boss_sprite("hurt")
         flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         flash.fill((255, 255, 255, 100))
         surf.blit(flash, (0, 0))
@@ -110,16 +153,24 @@ class Boss2(Enemy):
                 return True
             return False
 
+        # Timer sans degats pour l'expression raised_eyebrow
+        self.no_damage_timer += 1
+        if self.no_damage_timer >= self.no_damage_threshold and self.expression != "raised_eyebrow":
+            self.expression = "raised_eyebrow"
+            if not self.damage_animation_active:
+                self.image = self._create_boss_sprite()
+
         if self.damage_animation_active:
             self.damage_animation_timer += 1
             if (self.damage_animation_timer // self.damage_flash_interval) % 2 == 0:
                 self.image = self._create_damaged_sprite()
             else:
-                self.image = self._create_boss_sprite()
+                self.image = self._create_boss_sprite("hurt")
 
             if self.damage_animation_timer >= self.damage_animation_duration:
                 self.damage_animation_active = False
                 self.damage_animation_timer = 0
+                self.expression = "neutral"
                 self.image = self._create_boss_sprite()
 
         if not self.in_position:
@@ -212,6 +263,8 @@ class Boss2(Enemy):
         self.hp -= amount
         self.damage_animation_active = True
         self.damage_animation_timer = 0
+        self.expression = "hurt"
+        self.no_damage_timer = 0
 
     def draw(self, surface):
         pulse = abs(math.sin(self.pulse_timer * 0.05)) * 0.2 + 0.8
