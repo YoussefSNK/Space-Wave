@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 
-from config import SCREEN_WIDTH, WHITE
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE
 from graphics.effects import Explosion
 from entities.enemy import Enemy
 from entities.projectiles import Boss4Projectile, BouncingProjectile, SplittingProjectile
@@ -502,15 +502,40 @@ class Boss4(Enemy):
                 pygame.draw.circle(surface, (255, 210, 60), (int(orb_x), int(orb_y)), max(1, int(orb_size)))
                 pygame.draw.circle(surface, (255, 255, 200), (int(orb_x), int(orb_y)), max(1, int(orb_size * 0.5)))
 
-        if self.charging and self.charge_timer <= self.charge_warning_duration:
+        if self.charging and (self.swoop_phase == 0 or self.swoop_phase == 1):
             warning_alpha = int(200 * abs(math.sin(self.charge_timer * 0.4)))
-            # Bande de warning plus dramatique
-            warning_surf = pygame.Surface((SCREEN_WIDTH, 120), pygame.SRCALPHA)
-            for wy in range(120):
-                fade = 1.0 - (wy / 120.0)
-                a = int(warning_alpha * fade)
-                pygame.draw.line(warning_surf, (255, 80 + wy // 2, 0, a), (0, wy), (SCREEN_WIDTH, wy))
-            surface.blit(warning_surf, (0, self.rect.bottom))
+
+            # Tracé de la trajectoire elliptique en pointillés
+            trajectory_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            # Le swoop part du centre de l'écran (après centrage)
+            ellipse_cx = SCREEN_WIDTH // 2
+            ellipse_cy = self.target_y + 380  # target_y + radius_y
+            radius_x = 300
+            radius_y = 380
+            # Dessiner des points le long de l'ellipse
+            num_points = 60
+            progress = self.charge_timer / self.charge_warning_duration if self.swoop_phase == 0 else 1.0
+            visible_points = int(num_points * min(1.0, progress * 1.5))
+            for i in range(visible_points):
+                t = i / num_points
+                angle = math.pi / 2 - t * 2 * math.pi  # sens horaire depuis le haut
+                px = ellipse_cx - int(math.cos(angle) * radius_x)
+                py = ellipse_cy - int(math.sin(angle) * radius_y)
+                # Pointillés : un point sur deux
+                if i % 2 == 0:
+                    dot_alpha = int(warning_alpha * (0.4 + 0.6 * (1 - t)))
+                    pygame.draw.circle(trajectory_surf, (255, 180, 50, dot_alpha), (px, py), 3)
+
+            # Flèche directionnelle animée le long du trajet
+            arrow_t = (self.charge_timer * 0.02) % 1.0
+            arrow_angle = math.pi / 2 - arrow_t * 2 * math.pi
+            arrow_x = ellipse_cx - int(math.cos(arrow_angle) * radius_x)
+            arrow_y = ellipse_cy - int(math.sin(arrow_angle) * radius_y)
+            pygame.draw.circle(trajectory_surf, (255, 255, 150, warning_alpha), (arrow_x, arrow_y), 6)
+            pygame.draw.circle(trajectory_surf, (255, 255, 255, warning_alpha), (arrow_x, arrow_y), 3)
+
+            surface.blit(trajectory_surf, (0, 0))
+
             # Flash au centre du boss
             flash_r = int(60 + math.sin(self.charge_timer * 0.6) * 20)
             flash_surf = pygame.Surface((flash_r * 2, flash_r * 2), pygame.SRCALPHA)
