@@ -359,7 +359,7 @@ class Boss4(Enemy):
             print("Boss 4: Vortex!")
 
         elif pattern_index == 1:
-            for angle_deg in [-30, 0, 30]:
+            for angle_deg in [-35, -30, 0, 30, 35]:
                 angle_rad = math.radians(angle_deg)
                 dx = math.sin(angle_rad)
                 dy = math.cos(angle_rad)
