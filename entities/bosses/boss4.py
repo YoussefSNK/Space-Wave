@@ -59,6 +59,7 @@ class Boss4(Enemy):
         self.swoop_angle = 0.0  # angle along the swoop ellipse
         self.swoop_center_x = SCREEN_WIDTH // 2  # cible X pour le centrage
         self.swoop_centering_speed = 3
+        self.swoop_shots_fired = 0  # nombre de salves tirées pendant le swoop (0, 1, 2, 3)
 
         self.pulse_timer = 0
         self.ring_rotation = 0
@@ -282,6 +283,26 @@ class Boss4(Enemy):
                 angle = math.pi / 2 - self.swoop_angle  # sens horaire
                 self.rect.centerx = self.original_x - int(math.cos(angle) * radius_x)
                 self.rect.centery = center_y - int(math.sin(angle) * radius_y)
+                # Tirs en 8 directions à gauche (PI/2), en bas (PI), à droite (3*PI/2)
+                if enemy_projectiles is not None:
+                    shot_thresholds = [
+                        math.pi / 4,      # haut-gauche
+                        math.pi / 2,      # gauche
+                        3 * math.pi / 4,  # bas-gauche
+                        math.pi,          # bas
+                        5 * math.pi / 4,  # bas-droite
+                        3 * math.pi / 2,  # droite
+                        7 * math.pi / 4,  # haut-droite
+                    ]
+                    if self.swoop_shots_fired < len(shot_thresholds) and self.swoop_angle >= shot_thresholds[self.swoop_shots_fired]:
+                        bx, by = self.rect.centerx, self.rect.centery
+                        for i in range(8):
+                            a = math.radians(i * 45)
+                            dx = math.cos(a)
+                            dy = math.sin(a)
+                            enemy_projectiles.append(Boss4Projectile(bx, by, dx, dy, speed=5))
+                        self.swoop_shots_fired += 1
+                        print(f"Boss 4: Swoop burst {self.swoop_shots_fired}!")
                 # Fin du swoop après un tour complet
                 if self.swoop_angle >= 2 * math.pi:
                     self.charging = False
@@ -397,6 +418,7 @@ class Boss4(Enemy):
                 self.swoop_angle = 0.0
                 self.original_x = self.rect.centerx
                 self.original_y = self.rect.centery
+                self.swoop_shots_fired = 0
                 print("Boss 4: SWOOP!")
 
         return projectiles
