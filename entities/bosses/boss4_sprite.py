@@ -15,6 +15,8 @@ class Boss4Sprite:
         surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
         center = self.size // 2
 
+        outer_tip_radius = 78
+
         for i in range(12):
             angle = math.radians(30 * i)
             inner_radius = 40
@@ -28,6 +30,50 @@ class Boss4Sprite:
         pygame.draw.circle(surf, (180, 120, 0), (center, center), 45)
         pygame.draw.circle(surf, (255, 200, 50), (center, center), 40)
         pygame.draw.circle(surf, (255, 215, 0), (center, center), 45, 3)
+
+        # Points entre les branches + traits de jointure vers les extremites
+        for i in range(12):
+            mid_angle = math.radians(30 * i + 15)
+            px = center + math.cos(mid_angle) * 45
+            py = center + math.sin(mid_angle) * 45
+
+            angle_a = math.radians(30 * i)
+            tip_ax = center + math.cos(angle_a) * 70
+            tip_ay = center + math.sin(angle_a) * 70
+
+            angle_b = math.radians(30 * (i + 1))
+            tip_bx = center + math.cos(angle_b) * 70
+            tip_by = center + math.sin(angle_b) * 70
+
+            pygame.draw.line(surf, (255, 200, 0), (px, py), (tip_ax, tip_ay), 3)
+            pygame.draw.line(surf, (255, 200, 0), (px, py), (tip_bx, tip_by), 3)
+            pygame.draw.circle(surf, (255, 200, 0), (int(px), int(py)), 3)
+
+        # Traits orange du centre vers les branches etendues
+        for i in range(12):
+            angle = math.radians(30 * i)
+            ext_x = center + math.cos(angle) * outer_tip_radius
+            ext_y = center + math.sin(angle) * outer_tip_radius
+            pygame.draw.line(surf, (255, 127, 39), (center, center), (ext_x, ext_y), 3)
+
+        # Zigzag exterieur orange
+        outer_point_radius = 60
+        for i in range(12):
+            mid_angle = math.radians(30 * i + 15)
+            opx = center + math.cos(mid_angle) * outer_point_radius
+            opy = center + math.sin(mid_angle) * outer_point_radius
+
+            angle_a = math.radians(30 * i)
+            otip_ax = center + math.cos(angle_a) * outer_tip_radius
+            otip_ay = center + math.sin(angle_a) * outer_tip_radius
+
+            angle_b = math.radians(30 * (i + 1))
+            otip_bx = center + math.cos(angle_b) * outer_tip_radius
+            otip_by = center + math.sin(angle_b) * outer_tip_radius
+
+            pygame.draw.line(surf, (255, 127, 39), (opx, opy), (otip_ax, otip_ay), 3)
+            pygame.draw.line(surf, (255, 127, 39), (opx, opy), (otip_bx, otip_by), 3)
+            pygame.draw.circle(surf, (255, 127, 39), (int(opx), int(opy)), 3)
 
         triangle_size = 25
         triangle_points = []
