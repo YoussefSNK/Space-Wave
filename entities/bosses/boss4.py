@@ -1,11 +1,11 @@
-import pygame
 import random
 import math
 
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE
+from config import SCREEN_WIDTH
 from graphics.effects import Explosion
 from entities.enemy import Enemy
 from entities.projectiles import Boss4Projectile, BouncingProjectile, SplittingProjectile
+from entities.bosses.boss4_sprite import Boss4Sprite
 
 
 class Boss4(Enemy):
@@ -14,7 +14,8 @@ class Boss4(Enemy):
         super().__init__(x, y, speed)
 
         self.size = 160
-        self.image = self._create_boss_sprite()
+        self.sprite_renderer = Boss4Sprite(self.size)
+        self.image = self.sprite_renderer.create_sprite()
         self.rect = self.image.get_rect(center=(x, y))
         self.hp = 50
         self.target_y = target_y
@@ -66,56 +67,13 @@ class Boss4(Enemy):
         self.inner_rotation = 0
 
     def _create_boss_sprite(self):
-        """Cree un sprite procedural pour le Boss 4 - Soleil/Etoile divine"""
-        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        center = self.size // 2
-
-        for i in range(12):
-            angle = math.radians(30 * i)
-            inner_radius = 40
-            outer_radius = 70
-            x1 = center + math.cos(angle) * inner_radius
-            y1 = center + math.sin(angle) * inner_radius
-            x2 = center + math.cos(angle) * outer_radius
-            y2 = center + math.sin(angle) * outer_radius
-            pygame.draw.line(surf, (255, 200, 0), (x1, y1), (x2, y2), 4)
-
-        pygame.draw.circle(surf, (180, 120, 0), (center, center), 45)
-        pygame.draw.circle(surf, (255, 200, 50), (center, center), 40)
-        pygame.draw.circle(surf, (255, 215, 0), (center, center), 45, 3)
-
-        triangle_size = 25
-        triangle_points = []
-        for i in range(3):
-            angle = math.radians(120 * i - 90)
-            tx = center + math.cos(angle) * triangle_size
-            ty = center + math.sin(angle) * triangle_size
-            triangle_points.append((tx, ty))
-        pygame.draw.polygon(surf, (200, 100, 0), triangle_points)
-        pygame.draw.polygon(surf, (255, 150, 0), triangle_points, 2)
-
-        pygame.draw.circle(surf, (255, 50, 0), (center, center), 15)
-        pygame.draw.circle(surf, (255, 255, 0), (center, center), 10)
-        pygame.draw.circle(surf, WHITE, (center, center), 5)
-
-        return surf
+        return self.sprite_renderer.create_sprite()
 
     def _create_damaged_sprite(self):
-        """Cree un sprite endommage"""
-        surf = self._create_boss_sprite()
-        flash = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        flash.fill((255, 255, 255, 150))
-        surf.blit(flash, (0, 0))
-        return surf
+        return self.sprite_renderer.create_damaged_sprite()
 
     def _create_shield_sprite(self):
-        """Cree un sprite avec bouclier"""
-        surf = self._create_boss_sprite()
-        shield_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        pygame.draw.circle(shield_surf, (255, 215, 0, 100), (self.size//2, self.size//2), 75)
-        pygame.draw.circle(shield_surf, (255, 255, 200, 200), (self.size//2, self.size//2), 75, 3)
-        surf.blit(shield_surf, (0, 0))
-        return surf
+        return self.sprite_renderer.create_shield_sprite()
 
     def update(self, player_position=None, enemy_projectiles=None):
         self.timer += 1
@@ -366,68 +324,14 @@ class Boss4(Enemy):
         cx, cy = self.rect.centerx, self.rect.centery
 
         if not self.is_dying:
-            aura_size = int(90 * pulse)
-            aura_surf = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
-            pygame.draw.circle(aura_surf, (255, 200, 0, 30), (aura_size, aura_size), aura_size)
-            surface.blit(aura_surf, (cx - aura_size, cy - aura_size))
-
-            for i in range(3):
-                ring_radius = 85 + i * 15
-                ring_alpha = 100 - i * 30
-                ring_surf = pygame.Surface((ring_radius * 2 + 10, ring_radius * 2 + 10), pygame.SRCALPHA)
-                pygame.draw.circle(ring_surf, (255, 215, 0, ring_alpha),
-                                 (ring_radius + 5, ring_radius + 5), ring_radius, 2)
-                rotated = pygame.transform.rotate(ring_surf, self.ring_rotation * (i + 1) * 0.5)
-                rot_rect = rotated.get_rect(center=(cx, cy))
-                surface.blit(rotated, rot_rect)
-
-            for i in range(6):
-                angle = math.radians(self.ring_rotation * 2 + i * 60)
-                orb_x = cx + math.cos(angle) * 80
-                orb_y = cy + math.sin(angle) * 50
-                pygame.draw.circle(surface, (255, 200, 0), (int(orb_x), int(orb_y)), 6)
-                pygame.draw.circle(surface, WHITE, (int(orb_x), int(orb_y)), 3)
+            self.sprite_renderer.draw_aura(surface, cx, cy, pulse)
+            self.sprite_renderer.draw_rings(surface, cx, cy, self.ring_rotation)
+            self.sprite_renderer.draw_orbs(surface, cx, cy, self.ring_rotation)
 
         if self.charging and (self.swoop_phase == 0 or self.swoop_phase == 1):
-            warning_alpha = int(200 * abs(math.sin(self.charge_timer * 0.4)))
-
-            # Tracé de la trajectoire elliptique en pointillés
-            trajectory_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            # Le swoop part du centre de l'écran (après centrage)
-            ellipse_cx = SCREEN_WIDTH // 2
-            ellipse_cy = self.target_y + 380  # target_y + radius_y
-            radius_x = 300
-            radius_y = 380
-            # Dessiner des points le long de l'ellipse
-            num_points = 60
-            progress = self.charge_timer / self.charge_warning_duration if self.swoop_phase == 0 else 1.0
-            visible_points = int(num_points * min(1.0, progress * 1.5))
-            for i in range(visible_points):
-                t = i / num_points
-                angle = math.pi / 2 - t * 2 * math.pi  # sens horaire depuis le haut
-                px = ellipse_cx - int(math.cos(angle) * radius_x)
-                py = ellipse_cy - int(math.sin(angle) * radius_y)
-                # Pointillés : un point sur deux
-                if i % 2 == 0:
-                    dot_alpha = int(warning_alpha * (0.4 + 0.6 * (1 - t)))
-                    pygame.draw.circle(trajectory_surf, (255, 180, 50, dot_alpha), (px, py), 3)
-
-            # Flèche directionnelle animée le long du trajet
-            arrow_t = (self.charge_timer * 0.02) % 1.0
-            arrow_angle = math.pi / 2 - arrow_t * 2 * math.pi
-            arrow_x = ellipse_cx - int(math.cos(arrow_angle) * radius_x)
-            arrow_y = ellipse_cy - int(math.sin(arrow_angle) * radius_y)
-            pygame.draw.circle(trajectory_surf, (255, 255, 150, warning_alpha), (arrow_x, arrow_y), 6)
-            pygame.draw.circle(trajectory_surf, (255, 255, 255, warning_alpha), (arrow_x, arrow_y), 3)
-
-            surface.blit(trajectory_surf, (0, 0))
-
-            # Flash au centre du boss
-            flash_r = int(60 + math.sin(self.charge_timer * 0.6) * 20)
-            flash_surf = pygame.Surface((flash_r * 2, flash_r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(flash_surf, (255, 255, 200, int(warning_alpha * 0.5)),
-                             (flash_r, flash_r), flash_r)
-            surface.blit(flash_surf, (cx - flash_r, cy - flash_r))
+            self.sprite_renderer.draw_swoop_warning(
+                surface, cx, cy, self.charge_timer,
+                self.charge_warning_duration, self.swoop_phase, self.target_y)
 
         surface.blit(self.image, self.rect)
 
