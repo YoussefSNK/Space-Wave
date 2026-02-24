@@ -136,6 +136,191 @@ class Boss4Sprite:
             pygame.draw.circle(surface, (255, 200, 0), (int(orb_x), int(orb_y)), 6)
             pygame.draw.circle(surface, WHITE, (int(orb_x), int(orb_y)), 3)
 
+    def draw_rotation_announcement(self, surface, cx, cy, direction, progress):
+        """Dessine l'annonce du sens de rotation avec des vagues ondulees
+        dans la 3eme quart vertical de l'ecran, avec balayage progressif
+        direction: 1 = balayage vers la gauche, -1 = balayage vers la droite
+        progress: 0.0 -> 1.0 sur la duree de l'annonce"""
+        announce_surf = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        # 3eme quart vertical de l'ecran
+        zone_top = SCREEN_HEIGHT // 2
+        zone_bottom = SCREEN_HEIGHT * 3 // 4
+        zone_center_y = (zone_top + zone_bottom) // 2
+        zone_height = zone_bottom - zone_top
+
+        # Le front avance de 0 a 1 sur la largeur de l'ecran
+        # On etend au-dela de 1.0 pour que le fade-out ait le temps de finir
+        front = progress * 1.6
+
+        num_waves = 3
+        num_segments = 50
+        fade_behind = 0.4  # largeur du fade derriere le front (en fraction d'ecran)
+
+        for w in range(num_waves):
+            wave_offset_y = (w - 1) * (zone_height // 3)
+
+            for i in range(num_segments):
+                t1 = i / num_segments
+                t2 = (i + 1) / num_segments
+
+                # Position normalisee selon la direction
+                if direction == 1:  # droite : balayage de gauche a droite
+                    seg_pos = t1
+                else:  # gauche : balayage de droite a gauche
+                    seg_pos = 1.0 - t1
+
+                # Calcul alpha selon la distance au front
+                dist_behind = front - seg_pos
+                if dist_behind < 0:
+                    seg_alpha = 0
+                elif dist_behind < 0.05:
+                    seg_alpha = 0.5
+                elif dist_behind < fade_behind:
+                    seg_alpha = 1.0 - (dist_behind - 0.05) / (fade_behind - 0.05) * 0.8
+                else:
+                    seg_alpha = 0
+
+                if seg_alpha <= 0:
+                    continue
+
+                wave_layer_alpha = 0.4 + 0.6 * (1 - abs(w - 1) / 2)
+                final_alpha = int(255 * seg_alpha * wave_layer_alpha)
+                if final_alpha <= 0:
+                    continue
+
+                x1 = int(t1 * SCREEN_WIDTH)
+                x2 = int(t2 * SCREEN_WIDTH)
+                phase1 = t1 * math.pi * 4 + w * 0.8
+                phase2 = t2 * math.pi * 4 + w * 0.8
+                amp1 = 15 + 8 * math.sin(t1 * math.pi)
+                amp2 = 15 + 8 * math.sin(t2 * math.pi)
+                y1 = int(zone_center_y + wave_offset_y + math.sin(phase1) * amp1)
+                y2 = int(zone_center_y + wave_offset_y + math.sin(phase2) * amp2)
+
+                pygame.draw.line(announce_surf, (255, 200, 0, final_alpha), (x1, y1), (x2, y2), 2)
+
+        surface.blit(announce_surf, (0, 0))
+
+    def draw_ghost_branches(self, surface, cx, cy, rotation_angle, progress):
+        """Dessine une previsualisation fantome tres legere des branches au maximum d'extension"""
+        ghost_surf = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        base_inner = 40
+        base_outer = 70
+        stretch_factor = 30
+
+        inner_r = base_inner
+        outer_r = base_inner + (base_outer - base_inner) * stretch_factor
+
+        rot_rad = math.radians(rotation_angle)
+
+        # Alpha tres faible, croissant doucement avec le progress
+        ghost_alpha = int(1 + 49 * progress)  # 1 -> 50
+
+        for i in range(12):
+            angle = math.radians(30 * i) + rot_rad
+            x1 = cx + math.cos(angle) * inner_r
+            y1 = cy + math.sin(angle) * inner_r
+            x2 = cx + math.cos(angle) * outer_r
+            y2 = cy + math.sin(angle) * outer_r
+            pygame.draw.line(ghost_surf, (255, 200, 0, ghost_alpha), (x1, y1), (x2, y2), 3)
+
+        surface.blit(ghost_surf, (0, 0))
+
+    def draw_stretched_branches(self, surface, cx, cy, stretch_factor, rotation_angle, orange_fade):
+        """Dessine le boss complet avec branches etirees et rotation anti-horaire
+        orange_fade: 1.0 = pleinement visible, 0.0 = invisible"""
+        base_inner = 40
+        base_outer = 70
+        base_outer_tip = 78
+
+        inner_r = base_inner
+        outer_r = base_inner + (base_outer - base_inner) * stretch_factor
+        outer_tip_r = base_inner + (base_outer_tip - base_inner) * stretch_factor
+
+        rot_rad = math.radians(rotation_angle)
+
+        orange_alpha = int(255 * max(0, min(1, orange_fade)))
+
+        # Branches jaunes (lignes principales)
+        for i in range(12):
+            angle = math.radians(30 * i) + rot_rad
+            x1 = cx + math.cos(angle) * inner_r
+            y1 = cy + math.sin(angle) * inner_r
+            x2 = cx + math.cos(angle) * outer_r
+            y2 = cy + math.sin(angle) * outer_r
+            pygame.draw.line(surface, (255, 200, 0), (x1, y1), (x2, y2), 4)
+
+        # Points entre les branches + traits de jointure vers les extremites
+        for i in range(12):
+            mid_angle = math.radians(30 * i + 15) + rot_rad
+            px = cx + math.cos(mid_angle) * 45
+            py = cy + math.sin(mid_angle) * 45
+
+            angle_a = math.radians(30 * i) + rot_rad
+            tip_ax = cx + math.cos(angle_a) * outer_r
+            tip_ay = cy + math.sin(angle_a) * outer_r
+
+            angle_b = math.radians(30 * (i + 1)) + rot_rad
+            tip_bx = cx + math.cos(angle_b) * outer_r
+            tip_by = cy + math.sin(angle_b) * outer_r
+
+            pygame.draw.line(surface, (255, 200, 0), (px, py), (tip_ax, tip_ay), 3)
+            pygame.draw.line(surface, (255, 200, 0), (px, py), (tip_bx, tip_by), 3)
+            pygame.draw.circle(surface, (255, 200, 0), (int(px), int(py)), 3)
+
+        # Corps central - cercles (avant l'orange, comme dans create_sprite)
+        pygame.draw.circle(surface, (180, 120, 0), (cx, cy), 45)
+        pygame.draw.circle(surface, (255, 200, 50), (cx, cy), 40)
+        pygame.draw.circle(surface, (255, 215, 0), (cx, cy), 45, 3)
+
+        # Traits orange par-dessus les cercles et les branches jaunes
+        if orange_alpha > 0:
+            orange_surf = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            for i in range(12):
+                angle = math.radians(30 * i) + rot_rad
+                ext_x = cx + math.cos(angle) * outer_tip_r
+                ext_y = cy + math.sin(angle) * outer_tip_r
+                pygame.draw.line(orange_surf, (255, 127, 39, orange_alpha), (cx, cy), (ext_x, ext_y), 3)
+
+            # Zigzag exterieur orange
+            outer_point_r = base_inner + (60 - base_inner) * stretch_factor
+            for i in range(12):
+                mid_angle = math.radians(30 * i + 15) + rot_rad
+                opx = cx + math.cos(mid_angle) * outer_point_r
+                opy = cy + math.sin(mid_angle) * outer_point_r
+
+                angle_a = math.radians(30 * i) + rot_rad
+                otip_ax = cx + math.cos(angle_a) * outer_tip_r
+                otip_ay = cy + math.sin(angle_a) * outer_tip_r
+
+                angle_b = math.radians(30 * (i + 1)) + rot_rad
+                otip_bx = cx + math.cos(angle_b) * outer_tip_r
+                otip_by = cy + math.sin(angle_b) * outer_tip_r
+
+                pygame.draw.line(orange_surf, (255, 127, 39, orange_alpha), (opx, opy), (otip_ax, otip_ay), 3)
+                pygame.draw.line(orange_surf, (255, 127, 39, orange_alpha), (opx, opy), (otip_bx, otip_by), 3)
+                pygame.draw.circle(orange_surf, (255, 127, 39, orange_alpha), (int(opx), int(opy)), 3)
+
+            surface.blit(orange_surf, (0, 0))
+
+        # Triangle central (tourne avec le boss)
+        triangle_size = 25
+        triangle_points = []
+        for i in range(3):
+            angle = math.radians(120 * i - 90) + rot_rad
+            tx = cx + math.cos(angle) * triangle_size
+            ty = cy + math.sin(angle) * triangle_size
+            triangle_points.append((tx, ty))
+        pygame.draw.polygon(surface, (200, 100, 0), triangle_points)
+        pygame.draw.polygon(surface, (255, 150, 0), triangle_points, 2)
+
+        # Oeil central
+        pygame.draw.circle(surface, (255, 50, 0), (cx, cy), 15)
+        pygame.draw.circle(surface, (255, 255, 0), (cx, cy), 10)
+        pygame.draw.circle(surface, WHITE, (cx, cy), 5)
+
     def draw_swoop_warning(self, surface, cx, cy, charge_timer, charge_warning_duration, swoop_phase, target_y):
         """Dessine le warning visuel du swoop (trajectoire + flash)"""
         warning_alpha = int(200 * abs(math.sin(charge_timer * 0.4)))

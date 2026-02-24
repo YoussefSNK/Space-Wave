@@ -28,6 +28,27 @@ class Boss4(Enemy):
         self.lateral_movement_speed = 2.5
         self.lateral_direction = 1
 
+        self.cycle_count = 0
+        self.last_pattern_index = -1
+
+        self.branch_stretch_active = False
+        self.branch_stretch_timer = 0
+        self.branch_stretch_phase = 0  # 0=annonce, 1=etendre, 2=tourner, 3=replier
+        self.branch_stretch_cycle = 0  # 0-9 (10 cycles)
+        self.branch_stretch_rotation = 0
+        self.branch_stretch_direction = 1
+        self.branch_stretch_factor = 1
+        self.branch_stretch_consecutive = 0  # nombre de fois consecutives dans le meme sens
+        self.branch_announce_duration = 20
+
+        self.branch_windup_active = False
+        self.branch_windup_phase = 0  # 0=centrage, 1=etendre1, 2=replier1, 3=pause1, 4=etendre2, 5=replier2, 6=pause2
+        self.branch_windup_timer = 0
+        self.branch_windup_factor = 1.0
+        self.branch_extend_duration = 30
+        self.branch_rotate_duration = 30
+        self.branch_retract_duration = 30
+
         self.movement_angle = 0
         self.movement_radius_x = 150
         self.movement_radius_y = 40
@@ -211,21 +232,159 @@ class Boss4(Enemy):
                 self.original_y = self.rect.centery
                 print("Boss 4 en position de combat!")
         else:
-            self.movement_angle += 0.02
-            offset_x = math.sin(self.movement_angle) * self.movement_radius_x
-            offset_y = math.sin(self.movement_angle * 2) * self.movement_radius_y
-            self.rect.centerx = SCREEN_WIDTH // 2 + int(offset_x)
-            self.rect.centery = self.target_y + int(offset_y)
+            if not self.branch_windup_active:
+                self.movement_angle += 0.005 if self.branch_stretch_active else 0.02
+                offset_x = math.sin(self.movement_angle) * self.movement_radius_x
+                offset_y = math.sin(self.movement_angle * 2) * self.movement_radius_y
+                self.rect.centerx = SCREEN_WIDTH // 2 + int(offset_x)
+                self.rect.centery = self.target_y + int(offset_y)
 
             if self.hp < 25 and not self.shield_active and self.timer - self.last_shield_time >= self.shield_cooldown:
                 self.shield_active = True
                 self.shield_timer = 0
                 print("Boss 4: Bouclier active!")
 
+            if self.branch_windup_active:
+                if self.branch_windup_phase == 0:
+                    # Centrage vers le milieu de l'ecran
+                    diff_x = SCREEN_WIDTH // 2 - self.rect.centerx
+                    diff_y = self.target_y - self.rect.centery
+                    speed = 5
+                    if abs(diff_x) <= speed and abs(diff_y) <= speed:
+                        self.rect.centerx = SCREEN_WIDTH // 2
+                        self.rect.centery = self.target_y
+                        self.branch_windup_phase = 1
+                        self.branch_windup_timer = 0
+                        self.branch_windup_factor = 1.0
+                    else:
+                        self.rect.centerx += speed if diff_x > 0 else -speed if abs(diff_x) > speed else diff_x
+                        self.rect.centery += speed if diff_y > 0 else -speed if abs(diff_y) > speed else diff_y
+                elif self.branch_windup_phase == 1:
+                    # Etendre a 20% du max (factor ~7)
+                    self.branch_windup_timer += 1
+                    progress = self.branch_windup_timer / 10
+                    self.branch_windup_factor = 1 + progress * 6
+                    if self.branch_windup_timer >= 10:
+                        self.branch_windup_factor = 7
+                        self.branch_windup_phase = 2
+                        self.branch_windup_timer = 0
+                elif self.branch_windup_phase == 2:
+                    # Replier depuis 20%
+                    self.branch_windup_timer += 1
+                    progress = self.branch_windup_timer / 7
+                    self.branch_windup_factor = 7 - progress * 6
+                    if self.branch_windup_timer >= 7:
+                        self.branch_windup_factor = 1
+                        self.branch_windup_phase = 3
+                        self.branch_windup_timer = 0
+                elif self.branch_windup_phase == 3:
+                    # Pause entre les deux etirements
+                    self.branch_windup_timer += 1
+                    if self.branch_windup_timer >= 15:
+                        self.branch_windup_phase = 4
+                        self.branch_windup_timer = 0
+                elif self.branch_windup_phase == 4:
+                    # Etendre a 50% du max (factor ~15)
+                    self.branch_windup_timer += 1
+                    progress = self.branch_windup_timer / 12
+                    self.branch_windup_factor = 1 + progress * 14
+                    if self.branch_windup_timer >= 12:
+                        self.branch_windup_factor = 15
+                        self.branch_windup_phase = 5
+                        self.branch_windup_timer = 0
+                elif self.branch_windup_phase == 5:
+                    # Replier depuis 50%
+                    self.branch_windup_timer += 1
+                    progress = self.branch_windup_timer / 8
+                    self.branch_windup_factor = 15 - progress * 14
+                    if self.branch_windup_timer >= 8:
+                        self.branch_windup_factor = 1
+                        self.branch_windup_phase = 6
+                        self.branch_windup_timer = 0
+                elif self.branch_windup_phase == 6:
+                    # Pause avant le pattern
+                    self.branch_windup_timer += 1
+                    if self.branch_windup_timer >= 15:
+                        # Wind-up termine : lancer le vrai pattern
+                        self.branch_windup_active = False
+                        self.branch_windup_factor = 1.0
+                        self.movement_angle = 0.0  # resynchroniser depuis le centre
+                        self.branch_stretch_active = True
+                        self.branch_stretch_timer = 0
+                        self.branch_stretch_phase = 0
+                        self.branch_stretch_cycle = 0
+                        self.branch_stretch_rotation = 0
+                        self.branch_stretch_factor = 1
+                        self.branch_stretch_direction = random.choice([-1, 1])
+                        self.branch_stretch_consecutive = 1
+                return False
+
+            if self.branch_stretch_active:
+                self.branch_stretch_timer += 1
+                if self.branch_stretch_phase >= 1:
+                    if self.branch_stretch_phase == 1:
+                        self.branch_stretch_rotation -= 0.05 * self.branch_stretch_direction
+                    else:
+                        self.branch_stretch_rotation -= 0.75 * self.branch_stretch_direction
+                if self.branch_stretch_phase == 0:
+                    # Phase annonce
+                    if self.branch_stretch_timer >= self.branch_announce_duration:
+                        self.branch_stretch_timer = 0
+                        self.branch_stretch_phase = 1
+                elif self.branch_stretch_phase == 1:
+                    # Phase etendre
+                    progress = self.branch_stretch_timer / self.branch_extend_duration
+                    self.branch_stretch_factor = 1 + progress * 29
+                    if self.branch_stretch_timer >= self.branch_extend_duration:
+                        self.branch_stretch_factor = 30
+                        self.branch_stretch_timer = 0
+                        self.branch_stretch_phase = 2
+                elif self.branch_stretch_phase == 2:
+                    # Phase rotation (branches etendues)
+                    if self.branch_stretch_timer >= self.branch_rotate_duration:
+                        self.branch_stretch_timer = 0
+                        self.branch_stretch_phase = 3
+                elif self.branch_stretch_phase == 3:
+                    # Phase replier
+                    progress = self.branch_stretch_timer / self.branch_retract_duration
+                    self.branch_stretch_factor = 30 - progress * 29
+                    if self.branch_stretch_timer >= self.branch_retract_duration:
+                        self.branch_stretch_factor = 1
+                        self.branch_stretch_timer = 0
+                        self.branch_stretch_cycle += 1
+                        if self.branch_stretch_cycle >= 10:
+                            self.branch_stretch_active = False
+                            self.branch_stretch_cycle = 0
+                            self.branch_stretch_rotation = 0
+                            self.branch_stretch_factor = 1
+                        else:
+                            self.branch_stretch_phase = 0
+                            if self.branch_stretch_consecutive >= 2:
+                                new_dir = -self.branch_stretch_direction
+                                self.branch_stretch_consecutive = 1
+                            else:
+                                new_dir = random.choice([-1, 1])
+                                if new_dir == self.branch_stretch_direction:
+                                    self.branch_stretch_consecutive += 1
+                                else:
+                                    self.branch_stretch_consecutive = 1
+                            self.branch_stretch_direction = new_dir
+                return False
+
             if player_position and enemy_projectiles is not None:
                 if self.timer - self.last_shot_frame >= self.shoot_delay_frames:
                     self.last_shot_frame = self.timer
                     pattern_index = (self.timer // self.pattern_switch_interval) % 7
+                    if pattern_index == 0 and self.last_pattern_index == 6:
+                        self.cycle_count += 1
+                    self.last_pattern_index = pattern_index
+                    if pattern_index == 2 and self.cycle_count >= 1 and not self.branch_stretch_active and not self.branch_windup_active:
+                        self.branch_windup_active = True
+                        self.branch_windup_phase = 0
+                        self.branch_windup_timer = 0
+                        self.branch_windup_factor = 1.0
+                        print("Boss 4: Wind-up!")
+                        return False
                     self.current_pattern = pattern_index
                     projectiles = self.shoot_pattern(pattern_index, player_position)
                     enemy_projectiles.extend(projectiles)
@@ -328,12 +487,30 @@ class Boss4(Enemy):
             self.sprite_renderer.draw_rings(surface, cx, cy, self.ring_rotation)
             self.sprite_renderer.draw_orbs(surface, cx, cy, self.ring_rotation)
 
+        if self.branch_windup_active:
+            if self.branch_windup_phase == 0:
+                surface.blit(self.image, self.rect)
+            else:
+                self.sprite_renderer.draw_stretched_branches(
+                    surface, cx, cy, self.branch_windup_factor, 0, 1.0)
+        elif self.branch_stretch_active:
+            if self.branch_stretch_phase == 0:
+                progress = self.branch_stretch_timer / self.branch_announce_duration
+                self.sprite_renderer.draw_ghost_branches(
+                    surface, cx, cy, self.branch_stretch_rotation, progress)
+                self.sprite_renderer.draw_rotation_announcement(
+                    surface, cx, cy, self.branch_stretch_direction, progress)
+            orange_fade = max(0, 1.0 - ((self.branch_stretch_factor - 1) / 29) * 5)
+            self.sprite_renderer.draw_stretched_branches(
+                surface, cx, cy, self.branch_stretch_factor,
+                self.branch_stretch_rotation, orange_fade)
+        else:
+            surface.blit(self.image, self.rect)
+
         if self.charging and (self.swoop_phase == 0 or self.swoop_phase == 1):
             self.sprite_renderer.draw_swoop_warning(
                 surface, cx, cy, self.charge_timer,
                 self.charge_warning_duration, self.swoop_phase, self.target_y)
-
-        surface.blit(self.image, self.rect)
 
         for exp in self.death_explosions:
             exp.draw(surface)
