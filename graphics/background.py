@@ -1743,3 +1743,356 @@ class GalaxyBackground:
         # Clamp and render
         pixels = np.clip(pixels, 0, 255).astype(np.uint8)
         pygame.surfarray.blit_array(surface, pixels)
+
+
+class CosmicVortexBackground:
+    """Background spatial avec un vortex cosmique / trou noir en rotation.
+    Un disque d'accrétion lumineux tourne autour d'un centre sombre,
+    un champ d'étoiles déformé par la gravité,
+    et des particules aspirées vers le centre.
+    Rendu entièrement en 3D avec projection perspective et NumPy."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.time = 0.0
+
+        # Camera (plus lointaine pour un effet de distance)
+        fov = 60
+        self.cam_y = 0
+        self.cam_z = 140.0 #changer ici si je veux zoomer
+        self.focal = (SCREEN_HEIGHT / 2) / math.tan(math.radians(fov / 2))
+        self.cx = SCREEN_WIDTH / 2
+        self.cy = SCREEN_HEIGHT / 2
+
+        self._init_accretion_disk()
+        self._init_background_stars()
+        self._init_infalling_particles()
+
+    def _init_accretion_disk(self):
+        """Génère les particules du disque d'accrétion en anneaux concentriques."""
+        count = 15000
+        r_min = 8.0
+        r_max = 55.0
+
+        # Radii distribués avec plus de particules près du centre (densité r^-0.5)
+        u = np.random.random(count)
+        self.disk_r = r_min + (r_max - r_min) * (u ** 0.7)
+
+        # Angles initiaux
+        self.disk_theta = np.random.random(count) * 2 * np.pi
+
+        # Légère épaisseur du disque (plus mince au centre, plus épais aux bords)
+        thickness = 0.3 + (self.disk_r / r_max) * 1.5
+        self.disk_y_offset = np.random.normal(0, 1, count) * thickness
+
+        # Vitesse orbitale képlérienne (plus rapide près du centre)
+        self.disk_omega = 1.2 / np.sqrt(self.disk_r)
+
+        # Couleurs : gradient du blanc-bleu chaud (intérieur) vers le rouge-orange (extérieur)
+        t = ((self.disk_r - r_min) / (r_max - r_min)).reshape(-1, 1)
+
+        inner_color = np.array([220.0, 240.0, 255.0])   # Blanc-bleu très chaud
+        mid_color = np.array([255.0, 180.0, 60.0])       # Orange doré
+        outer_color = np.array([180.0, 40.0, 20.0])      # Rouge sombre
+
+        # Interpolation en 2 segments
+        colors_inner = inner_color * (1 - t * 2) + mid_color * (t * 2)
+        colors_outer = mid_color * (1 - (t - 0.5) * 2) + outer_color * ((t - 0.5) * 2)
+        self.disk_colors = np.where(t < 0.5, colors_inner, colors_outer)
+        self.disk_colors = np.clip(self.disk_colors, 0, 255)
+
+        # Luminosité de base (plus brillant au centre)
+        self.disk_base_bright = np.clip(1.5 - t.flatten() * 0.8, 0.4, 1.5)
+
+    def _init_background_stars(self):
+        """Génère un champ d'étoiles lointaines en 3D."""
+        count = 3000
+        # Étoiles disposées dans une grande sphère
+        phi = np.random.random(count) * 2 * np.pi
+        cos_theta = np.random.uniform(-1, 1, count)
+        sin_theta = np.sqrt(1 - cos_theta ** 2)
+        r = 150 + np.random.random(count) * 100  # Loin de la caméra
+
+        self.star_x = r * sin_theta * np.cos(phi)
+        self.star_y = r * cos_theta
+        self.star_z = r * sin_theta * np.sin(phi)
+
+        # Couleurs stellaires
+        star_temps = np.random.choice([0, 1, 2, 3], count, p=[0.15, 0.25, 0.35, 0.25])
+        palette = np.array([
+            [200, 220, 255],  # Bleu
+            [255, 255, 240],  # Blanc
+            [255, 240, 200],  # Jaune
+            [255, 200, 170],  # Orange
+        ], dtype=np.float64)
+        self.star_colors = palette[star_temps]
+        self.star_brightness = np.random.uniform(0.3, 1.0, count)
+
+    def _init_infalling_particles(self):
+        """Génère des particules qui spiralent vers le centre (matière absorbée)."""
+        count = 800
+        self.infall_r = np.random.uniform(20, 70, count)
+        self.infall_theta = np.random.random(count) * 2 * np.pi
+        self.infall_y = np.random.uniform(-15, 15, count)
+        self.infall_speed = np.random.uniform(0.01, 0.04, count)
+        self.infall_omega = 1.0 / np.sqrt(self.infall_r) * 0.8
+
+        # Couleur : lueur chaude orangée
+        t = ((self.infall_r - 20) / 50).reshape(-1, 1)
+        inner = np.array([255.0, 200.0, 100.0])
+        outer = np.array([200.0, 80.0, 30.0])
+        self.infall_colors = inner * (1 - t) + outer * t
+
+    def _project(self, x, y, z):
+        """Projection perspective 3D vers 2D."""
+        depth = self.cam_z - z
+        valid = depth > 0.1
+        safe_depth = np.where(valid, depth, 1.0)
+        sx = self.focal * x / safe_depth + self.cx
+        sy = self.focal * (self.cam_y - y) / safe_depth + self.cy
+        return sx, sy, depth, valid
+
+    def update(self):
+        self.time += 1.0 / 60.0
+
+    def draw(self, surface):
+        t = self.time
+        W, H = SCREEN_WIDTH, SCREEN_HEIGHT
+        pixels = np.zeros((W, H, 3), dtype=np.int32)
+
+        # --- Fond : étoiles lointaines ---
+        self._draw_stars(pixels, W, H)
+
+        # --- Disque d'accrétion en rotation ---
+        self._draw_accretion_disk(pixels, t, W, H)
+
+        # --- Particules en chute spirale ---
+        self._draw_infalling(pixels, t, W, H)
+
+        # --- Horizon des événements (centre sombre + anneau lumineux) ---
+        self._draw_event_horizon(pixels, t, W, H)
+
+        # --- Lensing glow (anneau de lumière gravitationnelle) ---
+        self._draw_lensing_ring(pixels, t, W, H)
+
+        # Clamp and render
+        pixels = np.clip(pixels, 0, 255).astype(np.uint8)
+        pygame.surfarray.blit_array(surface, pixels)
+
+    def _draw_stars(self, pixels, W, H):
+        """Dessine les étoiles de fond avec légère distorsion gravitationnelle."""
+        sx, sy, depth, valid = self._project(self.star_x, self.star_y, self.star_z)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        bright = self.star_brightness[vis].reshape(-1, 1)
+        colors = np.clip(self.star_colors[vis] * bright, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_accretion_disk(self, pixels, t, W, H):
+        """Dessine le disque d'accrétion en rotation différentielle."""
+        # Rotation : chaque particule tourne à sa propre vitesse orbitale
+        theta = self.disk_theta + self.disk_omega * t
+
+        # Position 3D dans le plan du disque (léger tilt pour la vue)
+        tilt = 0.85  # Inclinaison du disque (très penché)
+        cos_tilt = math.cos(tilt)
+        sin_tilt = math.sin(tilt)
+
+        dx = self.disk_r * np.cos(theta)
+        dz = self.disk_r * np.sin(theta)
+        dy_local = self.disk_y_offset
+
+        # Appliquer le tilt autour de l'axe X
+        ry = dy_local * cos_tilt - dz * sin_tilt
+        rz = dy_local * sin_tilt + dz * cos_tilt
+
+        sx, sy, depth, valid = self._project(dx, ry, rz)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+
+        # Luminosité avec scintillement temporel
+        flicker = 0.8 + 0.2 * np.sin(theta[vis] * 3 + t * 2)
+        bright = np.clip(70.0 / d * self.disk_base_bright[vis] * flicker, 0.1, 2.5)
+        colors = np.clip(self.disk_colors[vis] * bright.reshape(-1, 1), 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_infalling(self, pixels, t, W, H):
+        """Dessine les particules spiralant vers le trou noir."""
+        # Spirale vers l'intérieur
+        r = self.infall_r * np.exp(-self.infall_speed * t * 0.5)
+        r = np.maximum(r, 5.0)  # Minimum avant disparition
+        theta = self.infall_theta + self.infall_omega * t * 2
+
+        # Convergence verticale vers le plan du disque
+        y = self.infall_y * np.exp(-self.infall_speed * t * 0.3)
+
+        tilt = 0.85
+        cos_tilt = math.cos(tilt)
+        sin_tilt = math.sin(tilt)
+
+        dx = r * np.cos(theta)
+        dz = r * np.sin(theta)
+
+        ry = y * cos_tilt - dz * sin_tilt
+        rz = y * sin_tilt + dz * cos_tilt
+
+        sx, sy, depth, valid = self._project(dx, ry, rz)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+        bright = np.clip(50.0 / d, 0.1, 1.5).reshape(-1, 1)
+
+        # Fade quand la particule est proche du centre
+        r_vis = r[vis]
+        fade = np.clip((r_vis - 5) / 15, 0, 1).reshape(-1, 1)
+
+        colors = np.clip(self.infall_colors[vis] * bright * fade * 0.6, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_event_horizon(self, pixels, t, W, H):
+        """Dessine l'horizon des événements : centre sombre avec anneau lumineux."""
+        # Projeter le centre du trou noir
+        _, core_sy, _, _ = self._project(
+            np.array([0.0]), np.array([0.0]), np.array([0.0])
+        )
+        csx = int(self.cx)
+        csy = int(core_sy[0])
+
+        # Zone sombre centrale (absorbe la lumière)
+        dark_r = 18
+        x0, x1 = max(0, csx - dark_r), min(W, csx + dark_r)
+        y0, y1 = max(0, csy - dark_r), min(H, csy + dark_r)
+        if x1 > x0 and y1 > y0:
+            xx, yy = np.meshgrid(
+                np.arange(x0, x1), np.arange(y0, y1), indexing='ij'
+            )
+            dist = np.sqrt((xx - csx) ** 2 + (yy - csy) ** 2)
+
+            # Assombrir fortement le centre
+            darken = np.clip(1.0 - dist / dark_r, 0, 1) ** 1.5
+            darken_factor = (1.0 - darken * 0.95)
+
+            for c in range(3):
+                pixels[x0:x1, y0:y1, c] = (
+                    pixels[x0:x1, y0:y1, c] * darken_factor
+                ).astype(np.int32)
+
+        # Anneau lumineux juste autour de l'horizon (photon ring)
+        ring_r_inner = 16
+        ring_r_outer = 25
+        pulse = 1.0 + 0.3 * math.sin(t * 1.5)
+        rx0, rx1 = max(0, csx - ring_r_outer), min(W, csx + ring_r_outer)
+        ry0, ry1 = max(0, csy - ring_r_outer), min(H, csy + ring_r_outer)
+        if rx1 > rx0 and ry1 > ry0:
+            rxx, ryy = np.meshgrid(
+                np.arange(rx0, rx1), np.arange(ry0, ry1), indexing='ij'
+            )
+            rdist = np.sqrt((rxx - csx) ** 2 + (ryy - csy) ** 2)
+
+            # Anneau gaussien
+            ring_center = (ring_r_inner + ring_r_outer) / 2
+            ring_width = (ring_r_outer - ring_r_inner) / 2
+            ring_intensity = np.exp(-((rdist - ring_center) ** 2) / (2 * ring_width ** 2))
+            ring_intensity *= pulse * 20
+
+            # Couleur chaude dorée pour le photon ring
+            ri = (ring_intensity * 1.0).astype(np.int32)
+            gi = (ring_intensity * 0.7).astype(np.int32)
+            bi = (ring_intensity * 0.3).astype(np.int32)
+
+            pixels[rx0:rx1, ry0:ry1, 0] += ri
+            pixels[rx0:rx1, ry0:ry1, 1] += gi
+            pixels[rx0:rx1, ry0:ry1, 2] += bi
+
+    def _draw_lensing_ring(self, pixels, t, W, H):
+        """Dessine un halo de lentille gravitationnelle autour du trou noir."""
+        _, core_sy, _, _ = self._project(
+            np.array([0.0]), np.array([0.0]), np.array([0.0])
+        )
+        csx = int(self.cx)
+        csy = int(core_sy[0])
+
+        # Grand halo diffus de lensing
+        halo_r = 50
+        hx0, hx1 = max(0, csx - halo_r), min(W, csx + halo_r)
+        hy0, hy1 = max(0, csy - halo_r), min(H, csy + halo_r)
+        if hx1 > hx0 and hy1 > hy0:
+            hxx, hyy = np.meshgrid(
+                np.arange(hx0, hx1), np.arange(hy0, hy1), indexing='ij'
+            )
+            hdist = np.sqrt((hxx - csx) ** 2 + (hyy - csy) ** 2)
+
+            # Halo avec un pic autour de 30px (Einstein ring)
+            einstein_r = 30
+            einstein_w = 8
+            lensing = np.exp(-((hdist - einstein_r) ** 2) / (2 * einstein_w ** 2))
+
+            # Rotation de la teinte autour de l'anneau
+            h_angle = np.arctan2(hyy - csy, hxx - csx)
+            color_shift = 0.5 + 0.5 * np.sin(h_angle * 2 + t * 0.8)
+
+            pulse = 0.8 + 0.2 * math.sin(t * 0.7)
+            intensity = lensing * pulse * 12
+
+            # Couleur qui varie autour de l'anneau (orange -> bleu -> orange)
+            lr = (intensity * (0.6 + 0.4 * color_shift)).astype(np.int32)
+            lg = (intensity * (0.3 + 0.2 * color_shift)).astype(np.int32)
+            lb = (intensity * (0.3 + 0.5 * (1 - color_shift))).astype(np.int32)
+
+            pixels[hx0:hx1, hy0:hy1, 0] += lr
+            pixels[hx0:hx1, hy0:hy1, 1] += lg
+            pixels[hx0:hx1, hy0:hy1, 2] += lb
+
+        # Spotlights orbitants (lentille gravitationnelle focalisée)
+        for i in range(3):
+            phase = t * 0.3 + i * (2 * math.pi / 3)
+            spot_wx = math.sin(phase) * 55
+            spot_wz = math.cos(phase) * 55
+            spot_wy = math.sin(phase * 0.7 + i) * 10
+
+            spot_sx, spot_sy, sd, sv = self._project(
+                np.array([spot_wx]), np.array([spot_wy]), np.array([spot_wz])
+            )
+            if sv[0] and sd[0] > 0.1:
+                ssx, ssy = int(spot_sx[0]), int(spot_sy[0])
+                sr = 15
+                sx0, sx1 = max(0, ssx - sr), min(W, ssx + sr)
+                sy0, sy1 = max(0, ssy - sr), min(H, ssy + sr)
+                if sx1 > sx0 and sy1 > sy0:
+                    sxx, syy = np.meshgrid(
+                        np.arange(sx0, sx1), np.arange(sy0, sy1), indexing='ij'
+                    )
+                    sdist = np.sqrt((sxx - ssx) ** 2 + (syy - ssy) ** 2)
+                    sglow = np.clip(1.0 - sdist / sr, 0, 1) ** 2 * 10
+                    sgi = sglow.astype(np.int32)
+
+                    # Couleurs différentes pour chaque spotlight
+                    if i == 0:
+                        pixels[sx0:sx1, sy0:sy1, 0] += sgi
+                        pixels[sx0:sx1, sy0:sy1, 1] += (sgi * 0.6).astype(np.int32)
+                    elif i == 1:
+                        pixels[sx0:sx1, sy0:sy1, 1] += sgi
+                        pixels[sx0:sx1, sy0:sy1, 2] += sgi
+                    else:
+                        pixels[sx0:sx1, sy0:sy1, 0] += (sgi * 0.7).astype(np.int32)
+                        pixels[sx0:sx1, sy0:sy1, 2] += sgi
