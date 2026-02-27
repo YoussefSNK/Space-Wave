@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 import numpy as np
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
@@ -1522,3 +1523,223 @@ class AuroraBackground:
 
         # 6. Étoiles filantes
         self._draw_shooting_stars(surface)
+
+
+class GalaxyBackground:
+    """Background spatial avec une galaxie 3D en rotation composée de particules,
+    des nébuleuses colorées flottantes et des effets de lumière dynamiques.
+    Basé sur un rendu Three.js converti en projection 3D avec NumPy."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.time = 0.0
+
+        # Camera (matching Three.js: position.z=80, position.y=30, fov=75)
+        fov = 75
+        self.cam_y = 30.0
+        self.cam_z = 80.0
+        self.focal = (SCREEN_HEIGHT / 2) / math.tan(math.radians(fov / 2))
+        self.cx = SCREEN_WIDTH / 2
+        self.cy = SCREEN_HEIGHT / 2
+
+        self._init_galaxy()
+        self._init_nebulas()
+
+    def _init_galaxy(self):
+        """Generate galaxy particles in spiral arms (matching Three.js parameters)."""
+        count = 12000
+        r_max = 50.0
+        branches = 4
+        spin = 1.0
+        rand_factor = 0.2
+        rand_power = 3
+
+        inside_color = np.array([255.0, 96.0, 48.0])   # #ff6030
+        outside_color = np.array([27.0, 57.0, 132.0])   # #1b3984
+
+        radii = np.random.random(count) * r_max
+        spin_angles = radii * spin
+        branch_angles = (np.arange(count) % branches) / branches * 2 * np.pi
+
+        def rand_offset():
+            sign = np.where(np.random.random(count) < 0.5, 1.0, -1.0)
+            return np.power(np.random.random(count), rand_power) * sign * rand_factor * radii
+
+        self.gx = np.cos(branch_angles + spin_angles) * radii + rand_offset()
+        self.gy = rand_offset()
+        self.gz = np.sin(branch_angles + spin_angles) * radii + rand_offset()
+
+        # Color gradient from inside to outside
+        t = (radii / r_max).reshape(-1, 1)
+        self.g_colors = inside_color * (1 - t) + outside_color * t  # (count, 3)
+
+    def _init_nebulas(self):
+        """Generate three nebula particle clouds (matching Three.js)."""
+        self.nebulas = []
+        configs = [
+            # (color, spread_size, particle_count, world_position)
+            ((255, 0, 255), 100, 800, (30.0, -10.0, 0.0)),    # Magenta
+            ((0, 255, 255), 80, 600, (-40.0, 20.0, -20.0)),   # Cyan
+            ((255, 170, 0), 120, 1000, (0.0, 0.0, 40.0)),     # Orange
+        ]
+        for color, size, n, pos in configs:
+            lx = (np.random.random(n) - 0.5) * size
+            ly = (np.random.random(n) - 0.5) * size
+            lz = (np.random.random(n) - 0.5) * size
+            # Simulate opacity 0.4 with additive blending
+            c = np.array(color, dtype=np.float64) * 0.4
+            self.nebulas.append({
+                'lx': lx, 'ly': ly, 'lz': lz,
+                'color': c, 'pos': list(pos)
+            })
+
+    def _project(self, x, y, z):
+        """Perspective projection from 3D world space to 2D screen space."""
+        depth = self.cam_z - z
+        valid = depth > 0.1
+        safe_depth = np.where(valid, depth, 1.0)
+        sx = self.focal * x / safe_depth + self.cx
+        sy = self.focal * (self.cam_y - y) / safe_depth + self.cy
+        return sx, sy, depth, valid
+
+    def update(self):
+        self.time += 1.0 / 60.0
+
+    def draw(self, surface):
+        t = self.time
+        W, H = SCREEN_WIDTH, SCREEN_HEIGHT
+        pixels = np.zeros((W, H, 3), dtype=np.int32)
+
+        # --- Galaxy: rotate around Y axis ---
+        angle = t * 0.05
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        rx = self.gx * cos_a + self.gz * sin_a
+        rz = -self.gx * sin_a + self.gz * cos_a
+
+        sx, sy, depth, valid = self._project(rx, self.gy, rz)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+        bright = np.clip(80.0 / d, 0.3, 2.0).reshape(-1, 1)
+        colors = np.clip(self.g_colors[vis] * bright, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+        # --- Nebulas ---
+        for i, neb in enumerate(self.nebulas):
+            lx, ly, lz = neb['lx'], neb['ly'], neb['lz']
+            px, py, pz = neb['pos']
+
+            if i == 0:
+                # Rotate Y, then rotate X, then position with bobbing
+                a = t * 0.02
+                c, s = math.cos(a), math.sin(a)
+                nx = lx * c + lz * s
+                nz_tmp = -lx * s + lz * c
+                a2 = t * 0.01
+                c2, s2 = math.cos(a2), math.sin(a2)
+                ny = ly * c2 - nz_tmp * s2
+                nz = ly * s2 + nz_tmp * c2
+                nx += px
+                ny += math.sin(t * 0.3) * 5 - 10  # bobbing y (replaces base py=-10)
+                nz += pz
+            elif i == 1:
+                # Rotate Y, then position with x drift
+                a = -t * 0.03
+                c, s = math.cos(a), math.sin(a)
+                nx = lx * c + lz * s
+                nz = -lx * s + lz * c
+                ny = ly
+                nx += math.cos(t * 0.2) * 5 - 40  # drifting x (replaces base px=-40)
+                ny += py
+                nz += pz
+            else:
+                # Rotate Z, then position
+                a = t * 0.015
+                c, s = math.cos(a), math.sin(a)
+                nx = lx * c - ly * s
+                ny = lx * s + ly * c
+                nz = lz
+                nx += px
+                ny += py
+                nz += pz
+
+            sx, sy, depth, valid = self._project(nx, ny, nz)
+            sx_i = sx.astype(np.int32)
+            sy_i = sy.astype(np.int32)
+            vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+            ix, iy = sx_i[vis], sy_i[vis]
+            d = depth[vis]
+            bright = np.clip(60.0 / d, 0.1, 1.0)
+            nc = neb['color']
+            nr = np.clip(nc[0] * bright, 0, 255).astype(np.int32)
+            ng = np.clip(nc[1] * bright, 0, 255).astype(np.int32)
+            nb = np.clip(nc[2] * bright, 0, 255).astype(np.int32)
+
+            np.add.at(pixels[:, :, 0], (ix, iy), nr)
+            np.add.at(pixels[:, :, 1], (ix, iy), ng)
+            np.add.at(pixels[:, :, 2], (ix, iy), nb)
+
+        # --- Core glow (pulsating light at galaxy center) ---
+        core_intensity = 2.5 + math.sin(t * 2) * 0.5
+        _, core_sy, _, _ = self._project(
+            np.array([0.0]), np.array([0.0]), np.array([0.0])
+        )
+        csx = int(self.cx)
+        csy = int(core_sy[0])
+        gr = 40
+        x0, x1 = max(0, csx - gr), min(W, csx + gr)
+        y0, y1 = max(0, csy - gr), min(H, csy + gr)
+        if x1 > x0 and y1 > y0:
+            xx, yy = np.meshgrid(
+                np.arange(x0, x1), np.arange(y0, y1), indexing='ij'
+            )
+            dist = np.sqrt((xx - csx) ** 2 + (yy - csy) ** 2)
+            glow = np.clip(1.0 - dist / gr, 0, 1) ** 2 * core_intensity * 25
+            gi = glow.astype(np.int32)
+            pixels[x0:x1, y0:y1, 0] += gi
+            pixels[x0:x1, y0:y1, 1] += gi
+            pixels[x0:x1, y0:y1, 2] += gi
+
+        # --- Orbiting spotlight glows ---
+        spot_r = 25
+        for spot_idx in range(2):
+            phase = t * 0.4 + spot_idx * math.pi
+            spot_wx = math.sin(phase) * 70
+            spot_wz = math.cos(phase) * 70
+            spot_sx, spot_sy, sd, sv = self._project(
+                np.array([spot_wx]), np.array([50.0]), np.array([spot_wz])
+            )
+            if sv[0] and sd[0] > 0.1:
+                ssx = int(spot_sx[0])
+                ssy = int(spot_sy[0])
+                sx0 = max(0, ssx - spot_r)
+                sx1 = min(W, ssx + spot_r)
+                sy0 = max(0, ssy - spot_r)
+                sy1 = min(H, ssy + spot_r)
+                if sx1 > sx0 and sy1 > sy0:
+                    sxx, syy = np.meshgrid(
+                        np.arange(sx0, sx1), np.arange(sy0, sy1), indexing='ij'
+                    )
+                    sdist = np.sqrt((sxx - ssx) ** 2 + (syy - ssy) ** 2)
+                    sglow = np.clip(1.0 - sdist / spot_r, 0, 1) ** 2 * 15
+                    sgi = sglow.astype(np.int32)
+                    if spot_idx == 0:
+                        # Magenta spotlight
+                        pixels[sx0:sx1, sy0:sy1, 0] += sgi
+                        pixels[sx0:sx1, sy0:sy1, 2] += sgi
+                    else:
+                        # Cyan spotlight
+                        pixels[sx0:sx1, sy0:sy1, 1] += sgi
+                        pixels[sx0:sx1, sy0:sy1, 2] += sgi
+
+        # Clamp and render
+        pixels = np.clip(pixels, 0, 255).astype(np.uint8)
+        pygame.surfarray.blit_array(surface, pixels)
