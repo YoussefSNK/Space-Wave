@@ -2380,3 +2380,322 @@ class BacklitFractalBackground:
             pixels[x0:x1, y0:y1, 0] += (glow * (0.4 + 0.4 * color_phase)).astype(np.int32)
             pixels[x0:x1, y0:y1, 1] += (glow * 0.15).astype(np.int32)
             pixels[x0:x1, y0:y1, 2] += (glow * (0.3 + 0.3 * (1 - color_phase))).astype(np.int32)
+
+
+class SolarStormBackground:
+    """Background épique pour le combat du boss Soleil.
+    Atmosphère brûlante et oppressante : chaleur diffuse irradiant depuis le haut,
+    nuages de plasma en 3D, particules incandescentes et ondes de chaleur.
+    Rendu en 3D avec projection perspective et NumPy, comme GalaxyBackground."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.time = 0.0
+
+        # Camera
+        fov = 70
+        self.cam_y = 0.0
+        self.cam_z = 100.0
+        self.focal = (SCREEN_HEIGHT / 2) / math.tan(math.radians(fov / 2))
+        self.cx = SCREEN_WIDTH / 2
+        self.cy = SCREEN_HEIGHT / 2
+
+        self._init_plasma_clouds()
+        self._init_heat_particles()
+        self._init_background_stars()
+
+    def _init_plasma_clouds(self):
+        """Nuages de plasma 3D : particules volumétriques chaudes flottant dans l'espace."""
+        count = 18000
+
+        # Distribution : plus dense en haut (zone du soleil) et au centre
+        self.cloud_x = np.random.normal(0, 35, count)
+        self.cloud_y = np.random.uniform(-10, 60, count)  # Surtout au-dessus
+        self.cloud_z = np.random.normal(0, 35, count)
+
+        # Vitesse orbitale lente autour de l'axe Y (rotation du plasma)
+        r = np.sqrt(self.cloud_x ** 2 + self.cloud_z ** 2)
+        self.cloud_omega = 0.15 / np.maximum(r, 3.0)  # Plus lent loin du centre
+
+        # Dérive verticale lente (le plasma monte et descend)
+        self.cloud_vy = np.random.normal(0, 0.3, count)
+        self.cloud_phase = np.random.uniform(0, 2 * np.pi, count)
+
+        # Couleurs : gradient depuis blanc-jaune (chaud, dense) vers rouge-sombre (froid, diffus)
+        # Basé sur la distance au centre : plus proche = plus chaud
+        dist = np.sqrt(self.cloud_x ** 2 + (self.cloud_y - 30) ** 2 + self.cloud_z ** 2)
+        t = np.clip(dist / 50, 0, 1).reshape(-1, 1)
+
+        core_color = np.array([255.0, 200.0, 80.0])    # Jaune-or chaud
+        mid_color = np.array([255.0, 100.0, 30.0])      # Orange vif
+        outer_color = np.array([150.0, 30.0, 10.0])     # Rouge sombre
+
+        colors_inner = core_color * (1 - t * 2) + mid_color * (t * 2)
+        colors_outer = mid_color * (1 - (t - 0.5) * 2) + outer_color * ((t - 0.5) * 2)
+        self.cloud_colors = np.where(t < 0.5, colors_inner, colors_outer)
+        self.cloud_colors = np.clip(self.cloud_colors, 0, 255)
+
+        # Luminosité de base (plus brillant au centre)
+        self.cloud_brightness = np.clip(1.3 - t.flatten() * 0.8, 0.3, 1.3)
+
+    def _init_heat_particles(self):
+        """Particules de chaleur : braises et poussière incandescente en 3D."""
+        count = 4000
+
+        # Distribuées dans un grand volume, avec une tendance à descendre
+        self.heat_x = np.random.uniform(-70, 70, count)
+        self.heat_y = np.random.uniform(-40, 50, count)
+        self.heat_z = np.random.uniform(-70, 70, count)
+
+        # Vitesse : descendent lentement (vent solaire)
+        self.heat_vy = np.random.uniform(-0.8, -0.1, count)
+        # Légère dérive latérale
+        self.heat_vx = np.random.normal(0, 0.1, count)
+        self.heat_vz = np.random.normal(0, 0.1, count)
+
+        self.heat_phase = np.random.uniform(0, 2 * np.pi, count)
+        self.heat_freq = np.random.uniform(0.5, 2.5, count)
+
+        # Couleurs chaudes variées
+        t = np.random.random(count).reshape(-1, 1)
+        hot = np.array([255.0, 220.0, 120.0])
+        warm = np.array([255.0, 100.0, 40.0])
+        self.heat_colors = hot * (1 - t) + warm * t
+
+    def _init_background_stars(self):
+        """Étoiles lointaines en 3D, assombries par la luminosité ambiante."""
+        count = 2000
+        phi = np.random.random(count) * 2 * np.pi
+        cos_theta = np.random.uniform(-1, 1, count)
+        sin_theta = np.sqrt(1 - cos_theta ** 2)
+        r = 180 + np.random.random(count) * 100
+
+        self.star_x = r * sin_theta * np.cos(phi)
+        self.star_y = r * cos_theta
+        self.star_z = r * sin_theta * np.sin(phi)
+
+        # Assombrir les étoiles proches du "haut" (zone soleil, y > 0)
+        y_factor = np.clip(1.0 - self.star_y / 100, 0.05, 0.6)
+
+        palette = np.array([
+            [180, 200, 255],
+            [255, 255, 230],
+            [255, 220, 180],
+        ], dtype=np.float64)
+        temps = np.random.choice([0, 1, 2], count)
+        self.star_colors = palette[temps] * y_factor.reshape(-1, 1)
+        self.star_brightness = np.random.uniform(0.2, 0.7, count) * y_factor
+
+    def _project(self, x, y, z):
+        """Projection perspective 3D vers 2D."""
+        depth = self.cam_z - z
+        valid = depth > 0.1
+        safe_depth = np.where(valid, depth, 1.0)
+        sx = self.focal * x / safe_depth + self.cx
+        sy = self.focal * (self.cam_y - y) / safe_depth + self.cy
+        return sx, sy, depth, valid
+
+    def update(self):
+        self.time += 1.0 / 60.0
+
+    def draw(self, surface):
+        t = self.time
+        W, H = SCREEN_WIDTH, SCREEN_HEIGHT
+        pixels = np.zeros((W, H, 3), dtype=np.int32)
+
+        # --- Gradient de chaleur ambiant ---
+        self._draw_heat_gradient(pixels, t, W, H)
+
+        # --- Étoiles lointaines ---
+        self._draw_stars(pixels, W, H)
+
+        # --- Nuages de plasma 3D ---
+        self._draw_plasma_clouds(pixels, t, W, H)
+
+        # --- Particules de chaleur ---
+        self._draw_heat_particles(pixels, t, W, H)
+
+        # --- Halo solaire diffus ---
+        self._draw_solar_halo(pixels, t, W, H)
+
+        # --- Ondes de chaleur ---
+        self._draw_heat_waves(pixels, t, W, H)
+
+        # Clamp and render
+        pixels = np.clip(pixels, 0, 255).astype(np.uint8)
+        pygame.surfarray.blit_array(surface, pixels)
+
+    def _draw_heat_gradient(self, pixels, t, W, H):
+        """Gradient de chaleur : ambiance brûlante depuis le haut."""
+        y_coords = np.arange(H).reshape(1, -1)
+        y_norm = y_coords / H
+
+        pulse = 0.85 + 0.15 * math.sin(t * 0.4)
+
+        # Intensité décroissante vers le bas
+        intensity = np.clip(1.0 - y_norm * 1.3, 0, 1) ** 2.0 * pulse
+
+        pixels[:, :, 0] += (intensity * 30).astype(np.int32)
+        pixels[:, :, 1] += (intensity * 10).astype(np.int32)
+        pixels[:, :, 2] += (intensity * 3).astype(np.int32)
+
+    def _draw_stars(self, pixels, W, H):
+        """Étoiles de fond 3D."""
+        sx, sy, depth, valid = self._project(self.star_x, self.star_y, self.star_z)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        bright = self.star_brightness[vis].reshape(-1, 1)
+        colors = np.clip(self.star_colors[vis] * bright, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_plasma_clouds(self, pixels, t, W, H):
+        """Nuages de plasma 3D en rotation lente."""
+        # Rotation autour de Y (le plasma orbite)
+        theta = np.arctan2(self.cloud_z, self.cloud_x) + self.cloud_omega * t
+        r = np.sqrt(self.cloud_x ** 2 + self.cloud_z ** 2)
+
+        rx = r * np.cos(theta)
+        rz = r * np.sin(theta)
+
+        # Oscillation verticale
+        ry = self.cloud_y + np.sin(t * 0.5 + self.cloud_phase) * 3 + self.cloud_vy * math.sin(t * 0.3)
+
+        sx, sy, depth, valid = self._project(rx, ry, rz)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+
+        # Scintillement du plasma
+        flicker = 0.7 + 0.3 * np.sin(t * 1.5 + self.cloud_phase[vis])
+
+        bright = np.clip(60.0 / d * self.cloud_brightness[vis] * flicker, 0.05, 2.0).reshape(-1, 1)
+        colors = np.clip(self.cloud_colors[vis] * bright * 0.5, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_heat_particles(self, pixels, t, W, H):
+        """Particules de chaleur / braises descendantes en 3D."""
+        # Position avec dérive
+        x = self.heat_x + self.heat_vx * t * 20 + np.sin(t * 0.6 + self.heat_phase) * 5
+        y = self.heat_y + self.heat_vy * t * 8
+        z = self.heat_z + self.heat_vz * t * 20
+
+        # Rebouclage vertical (remontent quand elles sortent par le bas)
+        y = ((y + 40) % 90) - 40
+
+        sx, sy, depth, valid = self._project(x, y, z)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+
+        # Scintillement individuel
+        flicker = 0.4 + 0.6 * np.sin(t * self.heat_freq[vis] + self.heat_phase[vis])
+        flicker = np.clip(flicker, 0, 1)
+
+        bright = np.clip(40.0 / d * flicker, 0.02, 1.0).reshape(-1, 1)
+        colors = np.clip(self.heat_colors[vis] * bright * 0.35, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_solar_halo(self, pixels, t, W, H):
+        """Halo solaire diffus et pulsant en haut de l'écran."""
+        # Le soleil est "au-dessus" en 3D (y élevé)
+        _, halo_sy, _, _ = self._project(
+            np.array([0.0]), np.array([45.0]), np.array([0.0])
+        )
+        hsx = int(self.cx)
+        hsy = int(halo_sy[0])
+
+        pulse = 0.7 + 0.3 * math.sin(t * 0.8)
+        pulse2 = 0.8 + 0.2 * math.sin(t * 1.3 + 0.5)
+
+        # Halo externe diffus
+        halo_r = 220
+        x0, x1 = max(0, hsx - halo_r), min(W, hsx + halo_r)
+        y0, y1 = max(0, hsy - halo_r), min(H, hsy + halo_r)
+        if x1 > x0 and y1 > y0:
+            xx, yy = np.meshgrid(
+                np.arange(x0, x1), np.arange(y0, y1), indexing='ij'
+            )
+            dist = np.sqrt((xx - hsx) ** 2 + (yy - hsy) ** 2)
+            glow = np.clip(1.0 - dist / halo_r, 0, 1) ** 2.2 * pulse * 28
+
+            pixels[x0:x1, y0:y1, 0] += (glow * 1.0).astype(np.int32)
+            pixels[x0:x1, y0:y1, 1] += (glow * 0.45).astype(np.int32)
+            pixels[x0:x1, y0:y1, 2] += (glow * 0.08).astype(np.int32)
+
+        # Halo interne intense
+        inner_r = 80
+        ix0, ix1 = max(0, hsx - inner_r), min(W, hsx + inner_r)
+        iy0, iy1 = max(0, hsy - inner_r), min(H, hsy + inner_r)
+        if ix1 > ix0 and iy1 > iy0:
+            ixx, iyy = np.meshgrid(
+                np.arange(ix0, ix1), np.arange(iy0, iy1), indexing='ij'
+            )
+            idist = np.sqrt((ixx - hsx) ** 2 + (iyy - hsy) ** 2)
+            iglow = np.clip(1.0 - idist / inner_r, 0, 1) ** 3.0 * pulse2 * 50
+
+            pixels[ix0:ix1, iy0:iy1, 0] += (iglow * 1.0).astype(np.int32)
+            pixels[ix0:ix1, iy0:iy1, 1] += (iglow * 0.8).astype(np.int32)
+            pixels[ix0:ix1, iy0:iy1, 2] += (iglow * 0.25).astype(np.int32)
+
+    def _draw_heat_waves(self, pixels, t, W, H):
+        """Ondes de chaleur concentriques qui se propagent depuis le haut."""
+        _, wave_sy, _, _ = self._project(
+            np.array([0.0]), np.array([45.0]), np.array([0.0])
+        )
+        wsx = int(self.cx)
+        wsy = int(wave_sy[0])
+
+        wave_period = 5.0
+        n_waves = 3
+
+        for i in range(n_waves):
+            wave_t = (t + i * wave_period / n_waves) % wave_period
+            wave_frac = wave_t / wave_period
+
+            if wave_frac > 0.95:
+                continue
+
+            wave_r = wave_frac * 400
+            wave_width = 5 + wave_frac * 12
+            wave_alpha = (1.0 - wave_frac) ** 2.0
+
+            if wave_alpha < 0.02:
+                continue
+
+            ring_outer = wave_r + wave_width
+            rx0 = max(0, int(wsx - ring_outer))
+            rx1 = min(W, int(wsx + ring_outer))
+            ry0 = max(0, int(wsy - ring_outer))
+            ry1 = min(H, int(wsy + ring_outer))
+
+            if rx1 > rx0 and ry1 > ry0:
+                rxx, ryy = np.meshgrid(
+                    np.arange(rx0, rx1), np.arange(ry0, ry1), indexing='ij'
+                )
+                rdist = np.sqrt((rxx - wsx) ** 2 + (ryy - wsy) ** 2)
+
+                ring = np.exp(-((rdist - wave_r) ** 2) / (2 * wave_width ** 2))
+                ring *= wave_alpha * 14
+
+                pixels[rx0:rx1, ry0:ry1, 0] += (ring * 1.0).astype(np.int32)
+                pixels[rx0:rx1, ry0:ry1, 1] += (ring * 0.5).astype(np.int32)
+                pixels[rx0:rx1, ry0:ry1, 2] += (ring * 0.08).astype(np.int32)

@@ -7,7 +7,7 @@ et observer le rendu en temps réel.
 import pygame
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW
-from graphics.background import Background, SpiralNebulaBackground, AuroraBackground, GalaxyBackground, CosmicVortexBackground, BacklitFractalBackground
+from graphics.background import Background, SpiralNebulaBackground, AuroraBackground, GalaxyBackground, CosmicVortexBackground, BacklitFractalBackground, SolarStormBackground
 
 
 def show_menu(screen, font):
@@ -19,6 +19,7 @@ def show_menu(screen, font):
         "4 - Galaxie 3D",
         "5 - Vortex cosmique",
         "6 - Fractale rétro-éclairée",
+        "7 - Tempête solaire (Boss)",
         "",
         "ESC - Quitter"
     ]
@@ -37,6 +38,7 @@ def show_menu(screen, font):
         (255, 150, 80),    # Orange pour galaxie
         (255, 80, 80),     # Rouge pour vortex
         (200, 100, 255),   # Violet pour fractale
+        (255, 200, 50),    # Or pour solaire
     ]
 
     for i, option in enumerate(options):
@@ -72,6 +74,8 @@ def run_background_test(bg_type):
         background = CosmicVortexBackground(speed=2)
     elif bg_type == "Fractale rétro-éclairée":
         background = BacklitFractalBackground(speed=2)
+    elif bg_type == "Tempête solaire (Boss)":
+        background = SolarStormBackground(speed=2)
 
     speed = 2.0
     font = pygame.font.SysFont(None, 36)
@@ -160,6 +164,9 @@ def main():
                         running = False
                 elif event.key == pygame.K_6:
                     if not run_background_test("Fractale rétro-éclairée"):
+                        running = False
+                elif event.key == pygame.K_7:
+                    if not run_background_test("Tempête solaire (Boss)"):
                         running = False
 
     pygame.quit()
