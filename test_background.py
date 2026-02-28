@@ -7,7 +7,7 @@ et observer le rendu en temps réel.
 import pygame
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, WHITE, YELLOW
-from graphics.background import Background, SpiralNebulaBackground, AuroraBackground, GalaxyBackground, CosmicVortexBackground
+from graphics.background import Background, SpiralNebulaBackground, AuroraBackground, GalaxyBackground, CosmicVortexBackground, BacklitFractalBackground
 
 
 def show_menu(screen, font):
@@ -18,6 +18,7 @@ def show_menu(screen, font):
         "3 - Aurore cosmique",
         "4 - Galaxie 3D",
         "5 - Vortex cosmique",
+        "6 - Fractale rétro-éclairée",
         "",
         "ESC - Quitter"
     ]
@@ -35,6 +36,7 @@ def show_menu(screen, font):
         (100, 255, 150),   # Vert pour aurore
         (255, 150, 80),    # Orange pour galaxie
         (255, 80, 80),     # Rouge pour vortex
+        (200, 100, 255),   # Violet pour fractale
     ]
 
     for i, option in enumerate(options):
@@ -68,6 +70,8 @@ def run_background_test(bg_type):
         background = GalaxyBackground(speed=2)
     elif bg_type == "Vortex cosmique":
         background = CosmicVortexBackground(speed=2)
+    elif bg_type == "Fractale rétro-éclairée":
+        background = BacklitFractalBackground(speed=2)
 
     speed = 2.0
     font = pygame.font.SysFont(None, 36)
@@ -153,6 +157,9 @@ def main():
                         running = False
                 elif event.key == pygame.K_5:
                     if not run_background_test("Vortex cosmique"):
+                        running = False
+                elif event.key == pygame.K_6:
+                    if not run_background_test("Fractale rétro-éclairée"):
                         running = False
 
     pygame.quit()

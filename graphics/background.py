@@ -1989,3 +1989,394 @@ class CosmicVortexBackground:
                     else:
                         pixels[sx0:sx1, sy0:sy1, 0] += (sgi * 0.7).astype(np.int32)
                         pixels[sx0:sx1, sy0:sy1, 2] += sgi
+
+
+class BacklitFractalBackground:
+    """Background spatial avec une structure fractale rétro-éclairée.
+    Un arbre fractal en 3D tourne lentement, rétro-éclairé par une source
+    lumineuse pulsante qui crée des silhouettes et du rim-lighting coloré.
+    Des particules de poussière lumineuse dérivent autour de la fractale.
+    Rendu entièrement en 3D avec projection perspective et NumPy."""
+
+    def __init__(self, speed=2):
+        self.speed = speed
+        self.default_speed = speed
+        self.time = 0.0
+
+        # Camera
+        fov = 65
+        self.cam_y = 0.0
+        self.cam_z = 60.0
+        self.focal = (SCREEN_HEIGHT / 2) / math.tan(math.radians(fov / 2))
+        self.cx = SCREEN_WIDTH / 2
+        self.cy = SCREEN_HEIGHT / 2
+
+        self._init_fractal_tree()
+        self._init_dust_particles()
+        self._init_background_stars()
+
+    def _init_fractal_tree(self):
+        """Génère un arbre fractal 3D par subdivision récursive de branches."""
+        # Collecter tous les segments de branches comme particules
+        points_x = []
+        points_y = []
+        points_z = []
+        points_depth_level = []  # Profondeur dans la récursion (pour la couleur)
+
+        def add_branch(x, y, z, dx, dy, dz, length, depth, max_depth):
+            if depth > max_depth or length < 0.3:
+                return
+
+            # Nombre de particules par branche proportionnel à la longueur
+            n_pts = max(3, int(length * 4))
+            for i in range(n_pts):
+                t = i / n_pts
+                px = x + dx * length * t
+                py = y + dy * length * t
+                pz = z + dz * length * t
+                # Légère perturbation pour un aspect organique
+                jitter = 0.3 * (1 + depth * 0.2)
+                px += np.random.normal(0, jitter * 0.3)
+                py += np.random.normal(0, jitter * 0.3)
+                pz += np.random.normal(0, jitter * 0.3)
+                points_x.append(px)
+                points_y.append(py)
+                points_z.append(pz)
+                points_depth_level.append(depth)
+
+            # Extrémité de la branche
+            ex = x + dx * length
+            ey = y + dy * length
+            ez = z + dz * length
+
+            # Subdivisions : 2 à 3 sous-branches avec angles variés
+            n_children = random.choice([2, 2, 3])
+            new_length = length * random.uniform(0.62, 0.72)
+
+            for _ in range(n_children):
+                # Rotation aléatoire de la direction
+                angle_xy = random.uniform(-0.55, 0.55)
+                angle_xz = random.uniform(-0.55, 0.55)
+                angle_yz = random.uniform(-0.3, 0.3)
+
+                # Appliquer les rotations
+                cos_xy, sin_xy = math.cos(angle_xy), math.sin(angle_xy)
+                ndx = dx * cos_xy - dy * sin_xy
+                ndy = dx * sin_xy + dy * cos_xy
+
+                cos_xz, sin_xz = math.cos(angle_xz), math.sin(angle_xz)
+                ndx2 = ndx * cos_xz - dz * sin_xz
+                ndz = ndx * sin_xz + dz * cos_xz
+
+                cos_yz, sin_yz = math.cos(angle_yz), math.sin(angle_yz)
+                ndy2 = ndy * cos_yz - ndz * sin_yz
+                ndz2 = ndy * sin_yz + ndz * cos_yz
+
+                # Normaliser
+                norm = math.sqrt(ndx2**2 + ndy2**2 + ndz2**2)
+                if norm > 0.001:
+                    ndx2 /= norm
+                    ndy2 /= norm
+                    ndz2 /= norm
+
+                add_branch(ex, ey, ez, ndx2, ndy2, ndz2, new_length, depth + 1, max_depth)
+
+        # Générer plusieurs troncs pour un aspect plus riche
+        max_depth = 7
+        trunk_length = 18.0
+
+        # Tronc central vers le haut
+        add_branch(0, -25, 0, 0, 1, 0, trunk_length, 0, max_depth)
+        # Troncs secondaires légèrement inclinés
+        add_branch(-3, -25, 2, 0.1, 1, 0.05, trunk_length * 0.8, 0, max_depth)
+        add_branch(3, -25, -2, -0.1, 1, -0.05, trunk_length * 0.8, 0, max_depth)
+
+        self.tree_x = np.array(points_x, dtype=np.float64)
+        self.tree_y = np.array(points_y, dtype=np.float64)
+        self.tree_z = np.array(points_z, dtype=np.float64)
+        self.tree_depth = np.array(points_depth_level, dtype=np.float64)
+
+        # Couleur de la silhouette : gradient du tronc (brun sombre) aux extrémités (violet-bleu)
+        max_d = self.tree_depth.max() if len(self.tree_depth) > 0 else 1
+        t = (self.tree_depth / max_d).reshape(-1, 1)
+
+        trunk_color = np.array([30.0, 15.0, 40.0])    # Sombre violet-brun
+        tip_color = np.array([60.0, 20.0, 80.0])      # Violet plus vif aux extrémités
+        self.tree_base_colors = trunk_color * (1 - t) + tip_color * t
+
+    def _init_dust_particles(self):
+        """Génère des particules de poussière lumineuse flottant autour de la fractale."""
+        count = 2000
+
+        # Dispersées dans un volume autour de la fractale
+        self.dust_x = np.random.uniform(-60, 60, count)
+        self.dust_y = np.random.uniform(-50, 40, count)
+        self.dust_z = np.random.uniform(-60, 60, count)
+
+        # Vitesses de dérive lentes
+        self.dust_vx = np.random.normal(0, 0.02, count)
+        self.dust_vy = np.random.uniform(0.01, 0.05, count)  # Montent lentement
+        self.dust_vz = np.random.normal(0, 0.02, count)
+
+        # Phase individuelle pour scintillement
+        self.dust_phase = np.random.uniform(0, 2 * np.pi, count)
+        self.dust_freq = np.random.uniform(0.5, 2.0, count)
+
+        # Couleurs : mélange chaud/froid
+        t = np.random.random(count).reshape(-1, 1)
+        warm = np.array([255.0, 180.0, 80.0])    # Or chaud
+        cool = np.array([120.0, 160.0, 255.0])   # Bleu froid
+        self.dust_colors = warm * (1 - t) + cool * t
+
+    def _init_background_stars(self):
+        """Champ d'étoiles lointaines."""
+        count = 2500
+        phi = np.random.random(count) * 2 * np.pi
+        cos_theta = np.random.uniform(-1, 1, count)
+        sin_theta = np.sqrt(1 - cos_theta ** 2)
+        r = 180 + np.random.random(count) * 80
+
+        self.star_x = r * sin_theta * np.cos(phi)
+        self.star_y = r * cos_theta
+        self.star_z = r * sin_theta * np.sin(phi)
+
+        star_temps = np.random.choice([0, 1, 2, 3], count, p=[0.15, 0.25, 0.35, 0.25])
+        palette = np.array([
+            [180, 200, 255],
+            [255, 255, 230],
+            [255, 230, 190],
+            [255, 190, 160],
+        ], dtype=np.float64)
+        self.star_colors = palette[star_temps]
+        self.star_brightness = np.random.uniform(0.2, 0.8, count)
+
+    def _project(self, x, y, z):
+        """Projection perspective 3D vers 2D."""
+        depth = self.cam_z - z
+        valid = depth > 0.1
+        safe_depth = np.where(valid, depth, 1.0)
+        sx = self.focal * x / safe_depth + self.cx
+        sy = self.focal * (self.cam_y - y) / safe_depth + self.cy
+        return sx, sy, depth, valid
+
+    def update(self):
+        self.time += 1.0 / 60.0
+
+    def draw(self, surface):
+        t = self.time
+        W, H = SCREEN_WIDTH, SCREEN_HEIGHT
+        pixels = np.zeros((W, H, 3), dtype=np.int32)
+
+        # --- Fond : étoiles lointaines ---
+        self._draw_stars(pixels, W, H)
+
+        # --- Source lumineuse arrière (rétro-éclairage) ---
+        self._draw_backlight(pixels, t, W, H)
+
+        # --- Poussière lumineuse ---
+        self._draw_dust(pixels, t, W, H)
+
+        # --- Arbre fractal (silhouette + rim lighting) ---
+        self._draw_fractal(pixels, t, W, H)
+
+        # --- Halo central diffus par-dessus tout ---
+        self._draw_central_glow(pixels, t, W, H)
+
+        # Clamp and render
+        pixels = np.clip(pixels, 0, 255).astype(np.uint8)
+        pygame.surfarray.blit_array(surface, pixels)
+
+    def _draw_stars(self, pixels, W, H):
+        """Dessine les étoiles de fond."""
+        sx, sy, depth, valid = self._project(self.star_x, self.star_y, self.star_z)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        bright = self.star_brightness[vis].reshape(-1, 1)
+        colors = np.clip(self.star_colors[vis] * bright, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_backlight(self, pixels, t, W, H):
+        """Dessine la source lumineuse pulsante derrière la fractale."""
+        # La source est derrière la fractale (z négatif, loin de la caméra)
+        # On la projette mais on la dessine comme un grand halo 2D
+        _, light_sy, _, _ = self._project(
+            np.array([0.0]), np.array([5.0]), np.array([-20.0])
+        )
+        lsx = int(self.cx)
+        lsy = int(light_sy[0])
+
+        # Pulsation de la lumière
+        pulse = 0.7 + 0.3 * math.sin(t * 0.8)
+        pulse2 = 0.85 + 0.15 * math.sin(t * 1.3 + 1.0)
+
+        # Grand halo de rétro-éclairage
+        halo_r = 120
+        x0, x1 = max(0, lsx - halo_r), min(W, lsx + halo_r)
+        y0, y1 = max(0, lsy - halo_r), min(H, lsy + halo_r)
+        if x1 > x0 and y1 > y0:
+            xx, yy = np.meshgrid(
+                np.arange(x0, x1), np.arange(y0, y1), indexing='ij'
+            )
+            dist = np.sqrt((xx - lsx) ** 2 + (yy - lsy) ** 2)
+
+            # Gradient radial doux
+            glow = np.clip(1.0 - dist / halo_r, 0, 1) ** 1.8 * pulse * 35
+
+            # Couleur qui oscille entre magenta chaud et cyan froid
+            color_phase = 0.5 + 0.5 * math.sin(t * 0.25)
+
+            # Magenta-rose vers cyan-bleu
+            r_factor = 0.8 * color_phase + 0.2
+            g_factor = 0.2 + 0.3 * (1 - color_phase)
+            b_factor = 0.6 * (1 - color_phase) + 0.4
+
+            pixels[x0:x1, y0:y1, 0] += (glow * r_factor * pulse2).astype(np.int32)
+            pixels[x0:x1, y0:y1, 1] += (glow * g_factor * pulse2).astype(np.int32)
+            pixels[x0:x1, y0:y1, 2] += (glow * b_factor * pulse2).astype(np.int32)
+
+        # Rayons de lumière qui traversent (god rays simulés)
+        n_rays = 8
+        for i in range(n_rays):
+            ray_angle = (2 * math.pi * i / n_rays) + t * 0.1
+            ray_length = 90 + 20 * math.sin(t * 0.5 + i * 0.7)
+            ray_width = 6
+
+            # Points du rayon
+            n_pts = 30
+            for j in range(n_pts):
+                frac = j / n_pts
+                rx = lsx + math.cos(ray_angle) * ray_length * frac
+                ry = lsy + math.sin(ray_angle) * ray_length * frac
+                ri = int(rx)
+                rj = int(ry)
+
+                if 0 <= ri < W and 0 <= rj < H:
+                    intensity = (1 - frac) ** 2 * pulse * 8
+                    r_val = int(intensity * (0.5 + 0.3 * color_phase))
+                    g_val = int(intensity * 0.15)
+                    b_val = int(intensity * (0.3 + 0.2 * (1 - color_phase)))
+
+                    # Épaisseur du rayon
+                    for dy in range(-ray_width // 2, ray_width // 2 + 1):
+                        rj2 = rj + dy
+                        if 0 <= rj2 < H:
+                            falloff = 1.0 - abs(dy) / (ray_width / 2 + 1)
+                            pixels[ri, rj2, 0] = min(255, pixels[ri, rj2, 0] + int(r_val * falloff))
+                            pixels[ri, rj2, 1] = min(255, pixels[ri, rj2, 1] + int(g_val * falloff))
+                            pixels[ri, rj2, 2] = min(255, pixels[ri, rj2, 2] + int(b_val * falloff))
+
+    def _draw_dust(self, pixels, t, W, H):
+        """Dessine les particules de poussière lumineuse."""
+        # Animation : les particules dérivent et scintillent
+        dx = self.dust_x + np.sin(t * 0.3 + self.dust_phase) * 3
+        dy = self.dust_y + self.dust_vy * t * 10
+        dz = self.dust_z + np.cos(t * 0.2 + self.dust_phase * 0.7) * 2
+
+        # Rebouclage vertical
+        dy = ((dy + 50) % 90) - 50
+
+        sx, sy, depth, valid = self._project(dx, dy, dz)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+
+        # Scintillement
+        flicker = 0.5 + 0.5 * np.sin(t * self.dust_freq[vis] + self.dust_phase[vis])
+
+        bright = np.clip(50.0 / d * flicker, 0.05, 1.2).reshape(-1, 1)
+        colors = np.clip(self.dust_colors[vis] * bright * 0.4, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), colors[:, 0])
+        np.add.at(pixels[:, :, 1], (ix, iy), colors[:, 1])
+        np.add.at(pixels[:, :, 2], (ix, iy), colors[:, 2])
+
+    def _draw_fractal(self, pixels, t, W, H):
+        """Dessine l'arbre fractal avec rim-lighting dynamique."""
+        # Rotation lente autour de l'axe Y
+        angle_y = t * 0.08
+        cos_y, sin_y = math.cos(angle_y), math.sin(angle_y)
+
+        # Légère oscillation en X
+        angle_x = math.sin(t * 0.15) * 0.1
+        cos_x, sin_x = math.cos(angle_x), math.sin(angle_x)
+
+        # Rotation Y
+        rx = self.tree_x * cos_y + self.tree_z * sin_y
+        rz = -self.tree_x * sin_y + self.tree_z * cos_y
+
+        # Rotation X (inclinaison)
+        ry = self.tree_y * cos_x - rz * sin_x
+        rz2 = self.tree_y * sin_x + rz * cos_x
+
+        sx, sy, depth, valid = self._project(rx, ry, rz2)
+        sx_i = sx.astype(np.int32)
+        sy_i = sy.astype(np.int32)
+        vis = valid & (sx_i >= 0) & (sx_i < W) & (sy_i >= 0) & (sy_i < H)
+
+        ix, iy = sx_i[vis], sy_i[vis]
+        d = depth[vis]
+
+        # Rim lighting : les particules dont le z transformé est proche de la source
+        # lumineuse (derrière) reçoivent plus de lumière sur les bords
+        # La source est en z=-20, les branches proches de z=0 sont entre nous et la source
+        z_behind = rz2[vis]
+
+        # Plus une particule est "derrière" (z négatif), plus le rim-lighting est fort
+        rim_factor = np.clip((-z_behind + 10) / 40, 0, 1)
+
+        # Couleur du rim qui pulse avec la source lumineuse
+        pulse = 0.7 + 0.3 * math.sin(t * 0.8)
+        color_phase = 0.5 + 0.5 * math.sin(t * 0.25)
+
+        # Couleurs de base de la fractale (silhouette sombre)
+        bright_base = np.clip(60.0 / d, 0.2, 1.5)
+        base_colors = self.tree_base_colors[vis] * bright_base.reshape(-1, 1)
+
+        # Rim lighting : ajoute une teinte vive sur les contours rétro-éclairés
+        rim_r = 200 * color_phase + 80
+        rim_g = 60 + 40 * (1 - color_phase)
+        rim_b = 180 * (1 - color_phase) + 80
+
+        rim_intensity = rim_factor * pulse * 1.5
+        final_r = np.clip(base_colors[:, 0] + rim_r * rim_intensity, 0, 255).astype(np.int32)
+        final_g = np.clip(base_colors[:, 1] + rim_g * rim_intensity, 0, 255).astype(np.int32)
+        final_b = np.clip(base_colors[:, 2] + rim_b * rim_intensity, 0, 255).astype(np.int32)
+
+        np.add.at(pixels[:, :, 0], (ix, iy), final_r)
+        np.add.at(pixels[:, :, 1], (ix, iy), final_g)
+        np.add.at(pixels[:, :, 2], (ix, iy), final_b)
+
+    def _draw_central_glow(self, pixels, t, W, H):
+        """Ajoute un halo diffus au centre qui pulse doucement."""
+        pulse = 0.6 + 0.4 * math.sin(t * 0.5)
+        color_phase = 0.5 + 0.5 * math.sin(t * 0.25)
+
+        # Projeter le centre
+        _, cy_proj, _, _ = self._project(
+            np.array([0.0]), np.array([0.0]), np.array([0.0])
+        )
+        csx = int(self.cx)
+        csy = int(cy_proj[0])
+
+        glow_r = 35
+        x0, x1 = max(0, csx - glow_r), min(W, csx + glow_r)
+        y0, y1 = max(0, csy - glow_r), min(H, csy + glow_r)
+        if x1 > x0 and y1 > y0:
+            xx, yy = np.meshgrid(
+                np.arange(x0, x1), np.arange(y0, y1), indexing='ij'
+            )
+            dist = np.sqrt((xx - csx) ** 2 + (yy - csy) ** 2)
+            glow = np.clip(1.0 - dist / glow_r, 0, 1) ** 2.5 * pulse * 15
+
+            pixels[x0:x1, y0:y1, 0] += (glow * (0.4 + 0.4 * color_phase)).astype(np.int32)
+            pixels[x0:x1, y0:y1, 1] += (glow * 0.15).astype(np.int32)
+            pixels[x0:x1, y0:y1, 2] += (glow * (0.3 + 0.3 * (1 - color_phase))).astype(np.int32)
